@@ -143,6 +143,22 @@ class GenerationError(EngineError):
         )
 
 
+class GenerationNotFoundError(GenerationError):
+    """Generation request record not found."""
+
+    def __init__(
+        self,
+        message: str = "Generation request not found",
+        *,
+        generation_id: str = "",
+    ) -> None:
+        super().__init__(
+            message,
+            error_code="GENERATION_NOT_FOUND",
+            generation_id=generation_id,
+        )
+
+
 class VRAMInsufficientError(EngineError):
     """Not enough GPU VRAM for the requested operation."""
 

@@ -79,6 +79,20 @@ class IQueueManager(ABC):
         """Remove all items from the queue."""
 
     @abstractmethod
+    async def complete(self, item_id: str) -> QueueItem:
+        """Mark a queue item as completed and remove it.
+
+        Args:
+            item_id: Unique ID of the queue item.
+
+        Returns:
+            The completed QueueItem.
+
+        Raises:
+            QueueItemNotFoundError: If the item does not exist.
+        """
+
+    @abstractmethod
     async def get_size(self) -> int:
         """Get the current number of items waiting in the queue.
 

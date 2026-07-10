@@ -40,10 +40,41 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     db_manager.init(str(settings.paths.database_path.resolve()))
     await db_manager.create_all_tables()
 
+    # 2. Start background Queue Worker
+    from app.di.container import (
+        get_ai_engine,
+        get_event_bus,
+        get_queue_manager,
+        get_queue_worker,
+        get_storage,
+    )
+
+    bus = get_event_bus()
+    storage = get_storage(settings)
+    queue_mgr = get_queue_manager(settings)
+    engine = get_ai_engine(settings, bus, storage)
+    worker = get_queue_worker(queue_mgr, engine)
+    worker.start()
+
     yield
 
     # 3. Shutdown connection cleanups
     logger.info("Shutting down %s...", settings.app.name)
+
+    # Stop QueueWorker loop
+    try:
+        await worker.stop()
+    except Exception as e:
+        logger.error("Failed to stop queue worker: %s", str(e))
+
+    # Stop WebSocket monitor stats loop
+    try:
+        from app.api.v1.endpoints.websocket import stop_system_monitor_loop
+
+        stop_system_monitor_loop()
+    except Exception:
+        pass
+
     await db_manager.close()
 
 

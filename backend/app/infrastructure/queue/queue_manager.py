@@ -120,6 +120,20 @@ class InMemoryQueueManager(IQueueManager):
             self._queue.clear()
             logger.info("Cleared all items from generation queue.")
 
+    async def complete(self, item_id: str) -> QueueItem:
+        """Mark a queue item as completed and remove it."""
+        async with self._lock:
+            for i, item in enumerate(self._queue):
+                if item.id == item_id:
+                    completed_item = self._queue.pop(i)
+                    completed_item.status = QueueItemStatus.COMPLETED
+                    self._sort_and_reposition_unlocked()
+                    logger.info("Completed queue item '%s'", item_id)
+                    return completed_item
+
+            msg = f"Queue item with ID {item_id} not found."
+            raise QueueItemNotFoundError(msg, item_id=item_id)
+
     async def get_size(self) -> int:
         """Get the current number of items waiting in the queue."""
         async with self._lock:
