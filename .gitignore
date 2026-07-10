@@ -1,0 +1,110 @@
+# ═══════════════════════════════════════════
+# Image Agent — .gitignore
+# ═══════════════════════════════════════════
+
+# ─── Python ───
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+.eggs/
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python tools
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# ─── Node.js ───
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm
+.yarn/
+
+# ─── Electron ───
+out/
+release/
+
+# ─── Build outputs ───
+*.tsbuildinfo
+dist/
+dist-ssr/
+build/
+
+# ─── IDE ───
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# ─── OS ───
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ─── Environment ───
+.env
+.env.local
+.env.production
+.env.*.local
+
+# ─── AI Models (large files) ───
+models/checkpoints/
+models/loras/
+models/controlnet/
+models/upscalers/
+models/vae/
+models/embeddings/
+models/other/
+!models/.gitkeep
+
+# ─── Generated outputs ───
+outputs/
+!outputs/.gitkeep
+
+# ─── Logs ───
+logs/
+*.log
+
+# ─── Database ───
+*.db
+*.sqlite
+*.sqlite3
+
+# ─── Plugins (installed) ───
+plugins/installed/
+!plugins/installed/.gitkeep
+
+# ─── Temporary ───
+tmp/
+temp/
+*.tmp
+*.bak
+*.cache
