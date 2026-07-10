@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING
 from fastapi import Depends
 
 from app.config.settings import Settings, get_settings
+from app.engine.engine_manager import AIEngineManager
+from app.engine.model_loader import ModelLoader
 from app.infrastructure.database.connection import db_manager
 from app.infrastructure.database.repositories.generation_repo import (
     SQLAlchemyGenerationRepository,
@@ -33,7 +35,9 @@ if TYPE_CHECKING:
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from app.core.interfaces.ai_engine import IAIEngine
     from app.core.interfaces.event_bus import IEventBus
+    from app.core.interfaces.model_loader import IModelLoader
     from app.core.interfaces.queue_manager import IQueueManager
     from app.core.interfaces.repositories import (
         IGenerationRepository,
@@ -47,6 +51,7 @@ if TYPE_CHECKING:
 _event_bus: IEventBus | None = None
 _queue_manager: IQueueManager | None = None
 _storage_manager: IStorage | None = None
+_ai_engine: IAIEngine | None = None
 
 
 # ─── Configuration Provider ───
@@ -119,3 +124,22 @@ def get_settings_repository(
 ) -> ISettingsRepository:
     """Provide a settings repository instance."""
     return SQLAlchemySettingsRepository(session)
+
+
+def get_model_loader(
+    settings: Settings = Depends(get_settings_dep),
+) -> IModelLoader:
+    """Provide the Model Loader service."""
+    return ModelLoader(settings)
+
+
+def get_ai_engine(
+    settings: Settings = Depends(get_settings_dep),
+    event_bus: IEventBus = Depends(get_event_bus),
+    storage: IStorage = Depends(get_storage),
+) -> IAIEngine:
+    """Provide the AI Engine Manager singleton."""
+    global _ai_engine
+    if _ai_engine is None:
+        _ai_engine = AIEngineManager(settings, event_bus, storage)
+    return _ai_engine
