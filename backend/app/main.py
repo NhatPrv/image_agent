@@ -57,6 +57,45 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     worker = get_queue_worker(queue_mgr, engine)
     worker.start()
 
+    # 3. On first startup, scan models and auto-load the first available model.
+    # This uses a short-lived DB session context to register scanned models
+    # and then instruct the engine to load the first model discovered.
+    from app.di.container import get_services_context
+    from app.core.enums.scheduler_type import SchedulerType
+    from app.core.enums.status import QueuePriority
+    from app.core.entities.generation import GenerationParams
+
+    try:
+        async with get_services_context() as (gen_service, model_service):
+            models = await model_service.scan_and_register_models()
+            if models:
+                first = models[0]
+                logger.info("Auto-loading first discovered model: %s", first.name)
+                try:
+                    await model_service.load_model(first.id)
+                except Exception as e:
+                    logger.warning("Auto-load of model failed: %s", str(e))
+
+                # Enqueue a lightweight startup generation to validate pipeline end-to-end.
+                try:
+                    params = GenerationParams(
+                        prompt="Startup test image",
+                        negative_prompt="",
+                        width=256,
+                        height=256,
+                        steps=10,
+                        cfg_scale=7.5,
+                        seed=-1,
+                        sampler=SchedulerType.EULER_A,
+                        model_id=first.id,
+                    )
+                    await gen_service.create_generation(params, QueuePriority.NORMAL)
+                    logger.info("Startup test generation enqueued (generation will run in background).")
+                except Exception as e:
+                    logger.warning("Failed to enqueue startup test generation: %s", str(e))
+    except Exception as e:
+        logger.warning("Model auto-scan/load during startup failed: %s", str(e))
+
     yield
 
     # 3. Shutdown connection cleanups

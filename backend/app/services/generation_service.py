@@ -15,6 +15,9 @@ from app.core.entities.generation import GenerationEntity
 from app.core.entities.image_record import ImageRecord
 from app.core.enums.status import GenerationStatus
 from app.core.exceptions.base import GenerationError, GenerationNotFoundError
+import json
+from datetime import datetime
+from pathlib import Path
 
 if TYPE_CHECKING:
     from app.config.settings import Settings
@@ -176,6 +179,35 @@ class GenerationService:
             entity.duration_ms = duration_ms
             await self._generation_repo.update(entity)
 
+            # Persist generation metadata alongside outputs for easier auditing.
+            try:
+                if image_paths:
+                    out_dir = Path(image_paths[0]).parent
+                    meta = {
+                        "generation_id": generation_id,
+                        "prompt": entity.params.prompt,
+                        "negative_prompt": entity.params.negative_prompt,
+                        "model_id": entity.params.model_id,
+                        "params": entity.params.model_dump(),
+                        "status": "completed",
+                        "images": image_paths,
+                        "duration_ms": duration_ms,
+                        "created_at": entity.created_at.isoformat(),
+                        "completed_at": datetime.utcnow().isoformat(),
+                    }
+
+                    meta_path = out_dir / f"{generation_id}.json"
+                    loop = __import__("asyncio").get_running_loop()
+
+                    def _write_meta():
+                        with open(meta_path, "w", encoding="utf-8") as f:
+                            json.dump(meta, f, ensure_ascii=False, indent=2)
+
+                    await loop.run_in_executor(None, _write_meta)
+                    logger.info("Wrote generation metadata: %s", meta_path)
+            except Exception:
+                logger.warning("Failed to write generation metadata file.")
+
             # Complete queue item
             await self._queue_manager.complete(queue_item_id)
 
@@ -184,6 +216,33 @@ class GenerationService:
             entity.status = GenerationStatus.FAILED
             entity.error_message = str(e)
             await self._generation_repo.update(entity)
+
+            # Write failure metadata for debugging
+            try:
+                out_dir = Path(self._settings.paths.outputs_dir) / "failed_generations"
+                out_dir.mkdir(parents=True, exist_ok=True)
+                meta = {
+                    "generation_id": generation_id,
+                    "prompt": entity.params.prompt,
+                    "negative_prompt": entity.params.negative_prompt,
+                    "model_id": entity.params.model_id,
+                    "params": entity.params.model_dump(),
+                    "status": "failed",
+                    "error": str(e),
+                    "created_at": entity.created_at.isoformat(),
+                    "failed_at": datetime.utcnow().isoformat(),
+                }
+                meta_path = out_dir / f"{generation_id}.json"
+                loop = __import__("asyncio").get_running_loop()
+
+                def _write_fail():
+                    with open(meta_path, "w", encoding="utf-8") as f:
+                        json.dump(meta, f, ensure_ascii=False, indent=2)
+
+                await loop.run_in_executor(None, _write_fail)
+                logger.info("Wrote failed generation metadata: %s", meta_path)
+            except Exception:
+                logger.warning("Failed to write failed generation metadata file.")
 
             # Make sure we clean up the queue item on failure too
             await self._queue_manager.complete(queue_item_id)
