@@ -4,8 +4,6 @@ Provides real-time generation progress updates and hardware monitor statistics
 broadcasting.
 """
 
-from __future__ import annotations
-
 import asyncio
 import logging
 from typing import TYPE_CHECKING, Any

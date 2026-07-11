@@ -3,8 +3,6 @@
 REST router for model scanning, list querying, and GPU VRAM loading state.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -16,6 +14,11 @@ if TYPE_CHECKING:
     from app.services.model_service import ModelService
 
 router = APIRouter(prefix="/models", tags=["Models"])
+
+# Ensure Pydantic TypeAdapters are fully built at import time to avoid
+# "TypeAdapter ... is not fully defined" runtime errors when returning
+# lists of models via FastAPI response_model annotations.
+ModelInfoResponse.model_rebuild()
 
 
 @router.get("", response_model=list[ModelInfoResponse])

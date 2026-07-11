@@ -3,8 +3,6 @@
 Handles starting, cancel, and status queries for active model downloads.
 """
 
-from __future__ import annotations
-
 import logging
 from typing import TYPE_CHECKING
 

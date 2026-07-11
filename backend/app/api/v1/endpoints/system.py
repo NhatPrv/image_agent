@@ -3,8 +3,6 @@
 REST router for querying platform information and resource monitoring stats.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException, status

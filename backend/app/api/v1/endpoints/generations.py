@@ -3,8 +3,6 @@
 REST router for submitting generations and retrieving historical data records.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -17,6 +15,10 @@ if TYPE_CHECKING:
     from app.services.generation_service import GenerationService
 
 router = APIRouter(prefix="/generations", tags=["Generations"])
+
+# Ensure GenerationResponse TypeAdapter is initialized to prevent
+# "not fully defined" errors when returning list[GenerationResponse].
+GenerationResponse.model_rebuild()
 
 
 @router.post("", response_model=GenerationResponse, status_code=status.HTTP_201_CREATED)

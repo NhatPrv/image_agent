@@ -3,8 +3,6 @@
 Combines routers from various domains into a single API surface.
 """
 
-from __future__ import annotations
-
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (

@@ -3,8 +3,6 @@
 REST router for active generation priority queue inspection and task cancellation.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -16,6 +14,9 @@ if TYPE_CHECKING:
     from app.core.interfaces.queue_manager import IQueueManager
 
 router = APIRouter(prefix="/queue", tags=["Queue"])
+
+# Initialize Pydantic models to ensure list response TypeAdapters are ready.
+QueueItemResponse.model_rebuild()
 
 
 @router.get("", response_model=list[QueueItemResponse])

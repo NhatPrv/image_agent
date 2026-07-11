@@ -3,8 +3,6 @@
 REST router for reading and dynamically modifying application configuration parameters.
 """
 
-from __future__ import annotations
-
 import logging
 from typing import TYPE_CHECKING
 
@@ -36,7 +34,9 @@ async def get_settings(
         server={
             "host": settings.server.host,
             "port": settings.server.port,
-            "cors_origins": settings.server.cors_origins,
+            # `cors_origins` may not be present on older ServerSettings versions;
+            # fall back to empty list when missing to avoid AttributeError.
+            "cors_origins": getattr(settings.server, "cors_origins", []),
         },
         paths={
             "models_dir": settings.paths.models_dir,
