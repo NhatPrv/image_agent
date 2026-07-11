@@ -8,6 +8,11 @@
 
 - **Phase 1 — Foundation**: [/]
   - Recent changes (2026-07-11): backend pipeline dtype guards; `VRAMManager` CPU fallback behavior; added `get_by_path` repo helper; engine enum safety improvements.
+  - Status updates (2026-07-11):
+    - `AI Engine Core` items: some pipeline stability fixes applied — mark as in-progress `[/]` (needs additional testing on CPU/GPU).
+    - `VRAM Manager`: CPU-fallback behavior implemented — `[/]` (monitoring/alerts pending).
+    - `Model repository`: `get_by_path` added — `x` (implemented).
+    - `Frontend — Generate Page` sampler mapping fix — `[/]` (frontend validation fixed; integration testing pending).
 
 - **Phase 2 — Core Features**: [ ]
   - Recent changes: none
@@ -106,10 +111,10 @@
 - [x] 🔴 Base pipeline abstract class
 - [x] 🔴 Model loader (safetensors, ckpt support)
 - [x] 🔴 Model info extraction (name, type, architecture, size)
-- [x] 🔴 Text-to-Image pipeline (SD 1.5 via Diffusers)
-- [x] 🔴 Image-to-Image pipeline (SD 1.5 via Diffusers)
+- [/] 🔴 Text-to-Image pipeline (SD 1.5 via Diffusers) — stability fixes applied, testing ongoing
+- [/] 🔴 Image-to-Image pipeline (SD 1.5 via Diffusers) — stability fixes applied, testing ongoing
 - [x] 🟡 Scheduler factory (Euler, Euler_A, DPM++, DDIM)
-- [x] 🔴 VRAM Manager (monitoring, basic strategy)
+- [/] 🔴 VRAM Manager (monitoring, basic strategy) — CPU fallback implemented, monitoring pending
 - [x] 🟡 xformers / SDP attention optimization
 - [x] 🟡 VAE slicing for large images
 - [x] 🟡 Seed management (random, reproducible)
@@ -211,7 +216,7 @@
 - [x] 🔴 Image preview area (show generated image)
 - [x] 🔴 Progress bar (step progress, percentage)
 - [x] 🟡 Parameter panel:
-  - [x] 🟡 Sampler/Scheduler select
+  - [/] 🟡 Sampler/Scheduler select — mapping fix applied; integration testing pending
   - [x] 🟡 Steps slider (1-150)
   - [x] 🟡 CFG scale slider (1-30)
   - [x] 🟡 Width/Height inputs
@@ -439,7 +444,7 @@
 | Phase | Total Tasks | Completed | In Progress | Remaining |
 |---|---|---|---|---|
 | Phase 0 | 8 | 8 | 0 | 0 |
-| Phase 1 | ~95 | 0 | 0 | ~95 |
+| Phase 1 | ~95 | 4 | 3 | ~88 |
 | Phase 2 | ~28 | 0 | 0 | ~28 |
 | Phase 3 | ~25 | 0 | 0 | ~25 |
 | Phase 4 | ~8 | 0 | 0 | ~8 |
@@ -452,3 +457,17 @@
 > 📝 **Cập nhật lần cuối**: Sau khi hoàn thành Phase 0 (Documentation)
 >
 > 📌 **Bước tiếp theo**: Bắt đầu Phase 1 — Project Setup & Infrastructure
+
+## Developer Conventions
+
+- **Git commit message format**: Use conventional short messages describing the changed feature or bugfix.
+  - Format: `<type>(<scope>): short description`
+  - Types: `feat` (new feature), `fix` (bug fix), `chore` (maintenance), `docs` (documentation), `test` (tests), `refactor`.
+  - Examples:
+    - `fix(engine): guard float16 usage on CPU in txt2img/img2img`
+    - `feat(frontend): map sampler labels to scheduler keys`
+    - `chore(repo): add get_by_path to model repository`
+
+- **Commit message body** (optional): one-line explanation of why the change was made and any follow-up tasks.
+
+Follow this format when committing and pushing so `TODO.md` progress and commit history remain easy to audit.
