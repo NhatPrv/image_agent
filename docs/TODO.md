@@ -4,14 +4,21 @@
 
 ---
 
-## Progress Log
+## Phase Progress
 
-- 2026-07-11: Fixed several runtime issues discovered during development and testing:
-  - Backend: guard half-precision dtype selection to CUDA only (txt2img/img2img pipelines).
-  - Backend: allow CPU-mode operation when CUDA unavailable; only error if `GPU.device` explicitly set to `cuda` (vram_manager).
-  - Backend: added `get_by_path` repository helper and minor engine enum safety checks to prevent load errors.
-  - Frontend: map human-friendly sampler labels to backend scheduler enum keys to avoid validation 422 errors.
-  - Committed and pushed these changes (see repo history).
+- **Phase 1 — Foundation**: [/]
+  - Recent changes (2026-07-11): backend pipeline dtype guards; `VRAMManager` CPU fallback behavior; added `get_by_path` repo helper; engine enum safety improvements.
+
+- **Phase 2 — Core Features**: [ ]
+  - Recent changes: none
+
+- **Phase 3 — Advanced**: [ ]
+  - Recent changes: none
+
+- **Phase 4+**: [ ]
+  - Recent changes: none
+
+> Notes: This section tracks progress per phase. Use the checkboxes to indicate overall phase status: `[ ]` not started, `[/]` in progress, `[x]` completed.
 
 
 ## Legend
