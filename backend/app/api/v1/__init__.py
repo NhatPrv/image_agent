@@ -8,6 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
+    downloads,
     generations,
     models,
     queue,
@@ -34,3 +35,4 @@ router.include_router(queue.router)
 router.include_router(settings.router)
 router.include_router(system.router)
 router.include_router(websocket.router)
+router.include_router(downloads.router)

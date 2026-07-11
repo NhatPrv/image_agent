@@ -12,7 +12,12 @@ from fastapi.testclient import TestClient
 
 from app.core.entities.model_info import ModelInfo
 from app.core.enums.model_type import ModelArchitecture, ModelComponentType, ModelFileFormat
-from app.di.container import get_model_service, get_settings_dep, get_system_service
+from app.di.container import (
+    get_model_service,
+    get_settings_dep,
+    get_system_service,
+    get_download_service,
+)
 from app.main import app
 
 
@@ -147,5 +152,82 @@ def test_system_info_endpoint(client: TestClient):
         assert data["platform"] == "Windows"
         assert data["cpu"]["cores"] == 8
         assert data["gpu"]["device_name"] == "NVIDIA GeForce RTX 4060"
+    finally:
+        app.dependency_overrides.clear()
+
+
+# ─── Download Endpoints Tests ───
+
+
+def test_create_download_endpoint(client: TestClient):
+    """Verify that posting to download route invokes DownloadService.start_download."""
+    mock_task = {
+        "task_id": "download_task_123",
+        "url": "http://example.com/model.safetensors",
+        "filename": "model.safetensors",
+        "component_type": "checkpoint",
+        "status": "pending",
+    }
+    mock_service = MagicMock()
+    mock_service.start_download = AsyncMock(return_value=mock_task)
+
+    app.dependency_overrides[get_download_service] = lambda: mock_service
+
+    try:
+        response = client.post(
+            "/api/v1/downloads",
+            json={
+                "url": "http://example.com/model.safetensors",
+                "filename": "model.safetensors",
+                "component_type": "checkpoint",
+            },
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["task_id"] == "download_task_123"
+        assert data["status"] == "pending"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_list_downloads_endpoint(client: TestClient):
+    """Verify that list downloads route retrieves active downloads from service."""
+    mock_tasks = [
+        {
+            "task_id": "download_task_123",
+            "url": "http://example.com/model.safetensors",
+            "filename": "model.safetensors",
+            "component_type": "checkpoint",
+            "status": "downloading",
+        }
+    ]
+    mock_service = MagicMock()
+    mock_service.get_all_tasks.return_value = mock_tasks
+
+    app.dependency_overrides[get_download_service] = lambda: mock_service
+
+    try:
+        response = client.get("/api/v1/downloads")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["task_id"] == "download_task_123"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_cancel_download_endpoint(client: TestClient):
+    """Verify cancellation route requests cancel on DownloadService."""
+    mock_service = MagicMock()
+    mock_service.cancel_download = AsyncMock(return_value=True)
+
+    app.dependency_overrides[get_download_service] = lambda: mock_service
+
+    try:
+        response = client.post("/api/v1/downloads/download_task_123/cancel")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "cancelled"
+        assert data["task_id"] == "download_task_123"
     finally:
         app.dependency_overrides.clear()

@@ -7,14 +7,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from datetime import datetime
-
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.enums.generation_type import GenerationType
 from app.core.enums.scheduler_type import SchedulerType
 from app.core.enums.status import GenerationStatus, QueueItemStatus, QueuePriority
+
 from app.core.enums.model_type import ModelArchitecture, ModelComponentType, ModelFileFormat
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 # ─── Model Schemas ───
 

@@ -120,3 +120,42 @@ class SystemVRAMCriticalPayload(BaseEventPayload):
     total_mb: float
     percentage: float
     required_mb: float
+
+
+# ─── Download Events ───
+
+
+class DownloadStartedPayload(BaseEventPayload):
+    """Payload for download.started event."""
+
+    task_id: str
+    url: str
+    filename: str
+    started_at: str
+
+
+class DownloadProgressPayload(BaseEventPayload):
+    """Payload for download.progress event."""
+
+    task_id: str
+    bytes_downloaded: int
+    bytes_total: int
+    progress_percent: float
+    speed_mb: float
+    eta_seconds: float
+
+
+class DownloadCompletedPayload(BaseEventPayload):
+    """Payload for download.completed event."""
+
+    task_id: str
+    file_path: str
+    completed_at: str
+
+
+class DownloadFailedPayload(BaseEventPayload):
+    """Payload for download.failed event."""
+
+    task_id: str
+    error_message: str
+    failed_at: str

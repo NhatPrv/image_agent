@@ -30,6 +30,7 @@ from app.infrastructure.database.repositories.settings_repo import (
 from app.infrastructure.events.event_bus import InMemoryEventBus
 from app.infrastructure.queue.queue_manager import InMemoryQueueManager
 from app.infrastructure.storage.local_storage import LocalFileStorage
+from app.services.download_service import DownloadService
 from app.services.generation_service import GenerationService
 from app.services.model_service import ModelService
 from app.services.queue_worker import QueueWorker
@@ -58,6 +59,7 @@ _queue_manager: IQueueManager | None = None
 _storage_manager: IStorage | None = None
 _ai_engine: IAIEngine | None = None
 _queue_worker: QueueWorker | None = None
+_download_service: DownloadService | None = None
 
 
 # ─── Configuration Provider ───
@@ -187,6 +189,18 @@ def get_system_service(
 ) -> SystemService:
     """Provide a SystemService instance."""
     return SystemService(settings)
+
+
+def get_download_service(
+    settings: Settings = Depends(get_settings_dep),
+    event_bus: IEventBus = Depends(get_event_bus),
+    model_service: ModelService = Depends(get_model_service),
+) -> DownloadService:
+    """Provide the global DownloadService singleton."""
+    global _download_service
+    if _download_service is None:
+        _download_service = DownloadService(settings, event_bus, model_service)
+    return _download_service
 
 
 @asynccontextmanager

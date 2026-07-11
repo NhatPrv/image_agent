@@ -103,6 +103,10 @@ def register_event_bridge(event_bus: IEventBus) -> None:
         "model.loaded",
         "model.error",
         "model.unloaded",
+        "download.started",
+        "download.progress",
+        "download.completed",
+        "download.failed",
     ]
 
     for et in event_types:
