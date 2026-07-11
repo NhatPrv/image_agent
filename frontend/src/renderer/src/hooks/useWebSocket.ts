@@ -3,6 +3,7 @@ import { useSystemStore } from '../stores/useSystemStore'
 import { useGenerationStore } from '../stores/useGenerationStore'
 import { useModelStore } from '../stores/useModelStore'
 import { useQueueStore } from '../stores/useQueueStore'
+import { useDownloadStore } from '../stores/useDownloadStore'
 
 export function useWebSocket(): void {
   const ws = useRef<WebSocket | null>(null)
@@ -22,6 +23,10 @@ export function useWebSocket(): void {
   const setLoadingError = useModelStore((state) => state.setLoadingError)
 
   const removeQueueItem = useQueueStore((state) => state.removeQueueItem)
+
+  const addOrUpdateTask = useDownloadStore((state) => state.addOrUpdateTask)
+  const updateTaskProgress = useDownloadStore((state) => state.updateTaskProgress)
+  const updateTaskStatus = useDownloadStore((state) => state.updateTaskStatus)
 
   useEffect(() => {
     function connect(): void {
@@ -98,6 +103,39 @@ export function useWebSocket(): void {
 
             case 'model.unloaded':
               setActiveModel(null)
+              break
+
+            case 'download.started':
+              addOrUpdateTask({
+                task_id: data.task_id,
+                url: data.url,
+                filename: data.filename,
+                component_type: 'checkpoint',
+                bytes_downloaded: 0,
+                bytes_total: 0,
+                speed_mb: 0.0,
+                eta_seconds: 0.0,
+                status: 'pending',
+                file_path: ''
+              })
+              break
+
+            case 'download.progress':
+              updateTaskProgress(
+                data.task_id,
+                data.bytes_downloaded,
+                data.bytes_total,
+                data.speed_mb,
+                data.eta_seconds
+              )
+              break
+
+            case 'download.completed':
+              updateTaskStatus(data.task_id, 'completed')
+              break
+
+            case 'download.failed':
+              updateTaskStatus(data.task_id, 'failed', data.error_message)
               break
 
             default:

@@ -3,6 +3,7 @@ import { MainLayout } from './layouts/MainLayout'
 import { GenerateView } from './views/GenerateView'
 import { HistoryView } from './views/HistoryView'
 import { SettingsView } from './views/SettingsView'
+import { DownloadManagerView } from './views/DownloadManagerView'
 import { useWebSocket } from './hooks/useWebSocket'
 
 function App(): React.JSX.Element {
@@ -19,6 +20,8 @@ function App(): React.JSX.Element {
         return <GenerateView />
       case 'history':
         return <HistoryView />
+      case 'downloads':
+        return <DownloadManagerView />
       case 'settings':
         return <SettingsView />
       default:

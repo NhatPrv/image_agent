@@ -2,7 +2,8 @@ import React from 'react'
 import { useSystemStore } from '../stores/useSystemStore'
 import { useModelStore } from '../stores/useModelStore'
 import { useQueueStore } from '../stores/useQueueStore'
-import { Cpu, HardDrive, Cpu as GpuIcon, Activity, Wifi, WifiOff } from 'lucide-react'
+import { useDownloadStore } from '../stores/useDownloadStore'
+import { Cpu, HardDrive, Cpu as GpuIcon, Activity, Wifi, WifiOff, Download } from 'lucide-react'
 
 interface MainLayoutProps {
   children: React.ReactNode
@@ -21,6 +22,11 @@ export function MainLayout({
   const loadingModelId = useModelStore((state) => state.loadingModelId)
   const loadingProgress = useModelStore((state) => state.loadingProgress)
   const queueItems = useQueueStore((state) => state.queueItems)
+  const tasks = useDownloadStore((state) => state.tasks)
+
+  const activeDownloadsCount = tasks.filter(
+    (t) => t.status === 'downloading' || t.status === 'pending'
+  ).length
 
   const cpuUsage = stats?.cpu.usage_percent ?? 0
   const ramUsage = stats?.ram.usage_percent ?? 0
@@ -54,6 +60,12 @@ export function MainLayout({
             {[
               { id: 'generate', label: 'Generate View', icon: GpuIcon },
               { id: 'history', label: 'Gallery & History', icon: HardDrive },
+              {
+                id: 'downloads',
+                label: 'Download Manager',
+                icon: Download,
+                badge: activeDownloadsCount > 0 ? activeDownloadsCount : undefined
+              },
               { id: 'settings', label: 'Settings', icon: Activity }
             ].map((item) => {
               const Icon = item.icon
@@ -62,14 +74,21 @@ export function MainLayout({
                 <button
                   key={item.id}
                   onClick={() => setCurrentView(item.id)}
-                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium ${
                     active
                       ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-600/10'
                       : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
                   }`}
                 >
-                  <Icon className="h-4.5 w-4.5" />
-                  <span>{item.label}</span>
+                  <div className="flex items-center space-x-3">
+                    <Icon className="h-4.5 w-4.5" />
+                    <span>{item.label}</span>
+                  </div>
+                  {item.badge !== undefined && (
+                    <span className="bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
+                      {item.badge}
+                    </span>
+                  )}
                 </button>
               )
             })}
