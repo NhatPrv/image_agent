@@ -3,20 +3,20 @@
 Pydantic DTO models for REST request and response validation.
 """
 
-from __future__ import annotations
+# NOTE: Do NOT add `from __future__ import annotations` here.
+# Pydantic v2 TypeAdapter requires all annotations to be resolvable at
+# runtime. The future-annotations import makes them lazy strings, which
+# breaks TypeAdapter.rebuild() and causes PydanticUserError at request time.
 
-from typing import TYPE_CHECKING, Any
+from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.enums.generation_type import GenerationType
+from app.core.enums.model_type import ModelArchitecture, ModelComponentType, ModelFileFormat
 from app.core.enums.scheduler_type import SchedulerType
 from app.core.enums.status import GenerationStatus, QueueItemStatus, QueuePriority
-
-from app.core.enums.model_type import ModelArchitecture, ModelComponentType, ModelFileFormat
-
-if TYPE_CHECKING:
-    from datetime import datetime
 
 # ─── Model Schemas ───
 
