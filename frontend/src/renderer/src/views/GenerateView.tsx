@@ -101,6 +101,16 @@ export function GenerateView(): React.JSX.Element {
       return
     }
 
+    // Map UI sampler labels to backend scheduler keys
+    const samplerMap: Record<string, string> = {
+      'Euler': 'euler',
+      'Euler A': 'euler_a',
+      'DPM++ 2M': 'dpm_pp_2m',
+      'DPM++ 2M Karras': 'dpm_pp_2m_karras',
+      'Heun': 'heun',
+      'UniPC': 'unipc'
+    }
+
     const payload = {
       prompt,
       negative_prompt: negativePrompt,
@@ -109,7 +119,7 @@ export function GenerateView(): React.JSX.Element {
       steps,
       cfg_scale: cfgScale,
       seed: seed === -1 ? Math.floor(Math.random() * 9999999) : seed,
-      sampler,
+      sampler: samplerMap[sampler] ?? sampler.toLowerCase(),
       model_id: targetModel,
       type: 'txt2img',
       priority: 'normal'

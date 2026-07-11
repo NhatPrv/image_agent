@@ -49,6 +49,16 @@ class SQLAlchemyModelRepository(BaseRepository[AIModelRecord], IModelRepository)
             return None
         return self._to_entity(db_model)
 
+    async def get_by_path(self, path: str) -> ModelInfo | None:
+        """Retrieve model metadata by filesystem path."""
+        result = await self._session.execute(
+            select(AIModelRecord).where(AIModelRecord.path == path)
+        )
+        db_model = result.scalar_one_or_none()
+        if db_model is None:
+            return None
+        return self._to_entity(db_model)
+
     async def save(self, entity: ModelInfo) -> None:
         """Insert or update model metadata."""
         db_model = await super().get_by_id(entity.id)

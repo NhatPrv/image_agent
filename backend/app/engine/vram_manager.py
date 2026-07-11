@@ -107,9 +107,15 @@ class VRAMManager:
             VRAMInsufficientError: If memory is below safe threshold.
         """
         if not torch.cuda.is_available():
-            if self._settings.gpu.device != "cpu":
-                msg = "CUDA is not available. Please run in CPU mode."
+            # If CUDA is not available, allow operation when device is configured
+            # as 'cpu' or left as 'auto'. Only raise if the user explicitly
+            # requested CUDA ('cuda') but CUDA isn't present.
+            if self._settings.gpu.device == "cuda":
+                msg = "CUDA is not available but GPU device was explicitly configured."
                 raise CUDAError(msg)
+            logger.warning(
+                "CUDA is not available. Proceeding in CPU mode (this may be slower)."
+            )
             return
 
         used_mb, total_mb, free_mb = self.get_vram_info()

@@ -11,6 +11,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from app.core.enums.generation_type import GenerationType
+from app.core.enums.model_type import ModelArchitecture
 from app.core.exceptions.base import EngineError, ModelNotLoadedError
 from app.core.interfaces.ai_engine import IAIEngine
 from app.engine.pipelines.img2img import Img2ImgPipeline
@@ -173,7 +174,7 @@ class AIEngineManager(IAIEngine):
         # 2. Check memory thresholds
         # Estimate size: default estimate SD 1.5 is 2GB, SDXL is 6.5GB
         estimated_req_mb = 2000.0
-        if model.architecture == "sdxl":
+        if model.architecture == ModelArchitecture.SDXL:
             estimated_req_mb = 6500.0
 
         self._vram_manager.check_vram_safety(estimated_req_mb)

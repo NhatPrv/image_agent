@@ -35,8 +35,18 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
         super().__init__(settings)
 
     async def load(self, model_path: str) -> None:
-        dtype = torch.float16 if self.settings.gpu.dtype == "float16" else torch.float32
         is_cuda = torch.cuda.is_available() and self.settings.gpu.device != "cpu"
+        # Use float16/bfloat16 only when CUDA is available; fallback to float32 on CPU
+        if is_cuda:
+            if self.settings.gpu.dtype == "float16":
+                dtype = torch.float16
+            elif self.settings.gpu.dtype == "bfloat16":
+                dtype = torch.bfloat16
+            else:
+                dtype = torch.float32
+        else:
+            dtype = torch.float32
+
         device = "cuda" if is_cuda else "cpu"
 
         logger.info("Loading model checkpoint for Image-to-Image: %s", model_path)

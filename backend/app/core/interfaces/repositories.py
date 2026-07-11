@@ -42,6 +42,10 @@ class IModelRepository(ABC):
         """Retrieve model metadata by SHA-256 hash."""
 
     @abstractmethod
+    async def get_by_path(self, path: str) -> ModelInfo | None:
+        """Retrieve model metadata by filesystem path."""
+
+    @abstractmethod
     async def save(self, entity: ModelInfo) -> None:
         """Insert or update model metadata."""
 
