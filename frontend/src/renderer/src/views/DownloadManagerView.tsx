@@ -24,9 +24,9 @@ interface RecommendedModel {
 
 const RECOMMENDED_MODELS: RecommendedModel[] = [
   {
-    name: 'Stable Diffusion 1.5 Pruned Checkpoint',
+    name: 'Stable Diffusion 1.5 Pruned',
     filename: 'v1-5-pruned-emaonly.safetensors',
-    url: 'https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors',
+    url: 'https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors',
     size: '4.27 GB',
     type: 'checkpoint',
     description:
@@ -42,9 +42,9 @@ const RECOMMENDED_MODELS: RecommendedModel[] = [
       'Highly versatile checkpoint combining photo-realism, anime, and oil painting styles. Excels at generating rich detail and illustrations.'
   },
   {
-    name: 'Realistic Vision v6.0 B1',
-    filename: 'Realistic_Vision_V6.0_B1_noVAE.safetensors',
-    url: 'https://huggingface.co/SG161222/Realistic_Vision_V6.0_B1_noVAE/resolve/main/Realistic_Vision_V6.0_B1_noVAE.safetensors',
+    name: 'Realistic Vision V5.1',
+    filename: 'Realistic_Vision_V5.1.safetensors',
+    url: 'https://huggingface.co/SG161222/Realistic_Vision_V5.1_noVAE/resolve/main/Realistic_Vision_V5.1.safetensors',
     size: '2.13 GB',
     type: 'checkpoint',
     description:

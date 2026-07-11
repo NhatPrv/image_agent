@@ -74,15 +74,28 @@ _bridge_registered = False
 # ─── Event Bus WebSocket Bridge ───
 
 
-async def websocket_event_bridge(event_type: str, data: dict[str, Any]) -> None:
-    """Forward internal events from EventBus directly to WebSocket clients."""
+async def websocket_event_bridge(event_type: str, data: Any) -> None:
+    """Forward internal events from EventBus directly to WebSocket clients.
+
+    Accepts both Pydantic model payloads and plain dicts.
+    """
+    from pydantic import BaseModel
+
+    # Serialize Pydantic models to plain dict so they can be JSON-broadcast
+    if isinstance(data, BaseModel):
+        data_dict = data.model_dump(mode="json")
+    elif isinstance(data, dict):
+        data_dict = data
+    else:
+        data_dict = {"value": str(data)}
+
     packet = {
         "event": event_type,
-        "timestamp": data.get("completed_at")
-        or data.get("started_at")
-        or data.get("loaded_at")
+        "timestamp": data_dict.get("completed_at")
+        or data_dict.get("started_at")
+        or data_dict.get("loaded_at")
         or "",
-        "data": data,
+        "data": data_dict,
     }
     await manager.broadcast(packet)
 
