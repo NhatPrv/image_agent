@@ -14,7 +14,6 @@ from app.api.v1.endpoints import (
     queue,
     settings,
     system,
-    websocket,
 )
 
 router = APIRouter()
@@ -34,5 +33,5 @@ router.include_router(generations.router)
 router.include_router(queue.router)
 router.include_router(settings.router)
 router.include_router(system.router)
-router.include_router(websocket.router)
 router.include_router(downloads.router)
+# Note: websocket.router is mounted directly at root /ws in main.py

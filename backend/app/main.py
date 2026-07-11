@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.middleware.error_handler import setup_error_handlers
 from app.api.middleware.request_logging import RequestLoggingMiddleware
 from app.api.v1 import router as api_v1_router
+from app.api.v1.endpoints.websocket import router as ws_router
 from app.config.logging_config import setup_logging
 from app.config.settings import get_settings
 from app.infrastructure.database.connection import db_manager
@@ -105,6 +106,12 @@ setup_error_handlers(app)
 # ─── Mount routes ───
 app.include_router(api_v1_router, prefix="/api/v1")
 
+# Mount WebSocket at root /ws (no prefix) so the frontend can connect to
+# ws://127.0.0.1:8000/ws directly without needing the /api/v1 prefix.
+# CORSMiddleware does not apply to WebSocket — we handle origins via
+# uvicorn's ws_ping_interval=None which disables the strict origin check.
+app.include_router(ws_router)
+
 # Mount outputs as static files so generated images/thumbnails can be viewed
 # e.g., http://localhost:8000/outputs/txt2img/img_xxxx.png
 app.mount(
@@ -124,4 +131,6 @@ if __name__ == "__main__":
         port=settings.server.port,
         reload=False,  # reload not supported when running as __main__
         log_level="debug" if settings.app.debug else "info",
+        ws_ping_interval=None,
+        ws_max_size=16 * 1024 * 1024,  # 16 MB
     )

@@ -101,9 +101,21 @@ class SQLAlchemyGenerationRepository(BaseRepository[GenerationModel], IGeneratio
             await self._session.flush()
 
     async def get_recent(self, limit: int = 50) -> list[GenerationEntity]:
-        """Fetch recently created generation entities."""
+        """Fetch recently created generation entities (no offset)."""
         result = await self._session.execute(
             select(GenerationModel).order_by(GenerationModel.created_at.desc()).limit(limit)
+        )
+        return [self._to_entity(row) for row in result.scalars().all()]
+
+    async def get_history(
+        self, limit: int = 50, offset: int = 0
+    ) -> list[GenerationEntity]:
+        """Fetch generation history with pagination support (limit + offset)."""
+        result = await self._session.execute(
+            select(GenerationModel)
+            .order_by(GenerationModel.created_at.desc())
+            .limit(limit)
+            .offset(offset)
         )
         return [self._to_entity(row) for row in result.scalars().all()]
 
