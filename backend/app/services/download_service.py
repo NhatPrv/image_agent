@@ -149,7 +149,15 @@ class DownloadService:
         return True
 
     async def _download_loop(self, task: DownloadTask) -> None:
-        """Core download routine executing chunked streams and telemetry metrics."""
+        """Core download routine with auto-retry and HTTP Range resume support.
+
+        Handles HuggingFace CDN connection drops gracefully by resuming
+        from the last received byte using 'Range: bytes=X-' headers.
+        Retries up to MAX_RETRIES times with exponential backoff.
+        """
+        MAX_RETRIES = 10
+        CHUNK_SIZE = 512 * 1024  # 512 KB
+
         task.status = "downloading"
         task.start_time = time.time()
         temp_path = Path(f"{task.file_path}.download")
@@ -163,62 +171,122 @@ class DownloadService:
         )
         await self._event_bus.publish("download.started", started_payload)
 
+        attempt = 0
+        last_emit_time = time.time()
+
         try:
-            # Configure request limits
-            timeout = aiohttp.ClientTimeout(total=7200, connect=30)
-            async with (
-                aiohttp.ClientSession(timeout=timeout) as session,
-                session.get(task.url) as response,
-            ):
-                if response.status != 200:
-                    msg = f"HTTP Server returned status code {response.status}"
-                    raise ValueError(msg)
+            while attempt < MAX_RETRIES:
+                attempt += 1
 
-                task.bytes_total = int(response.headers.get("content-length", 0))
+                # Resume: check how many bytes already written to temp file
+                resume_from = temp_path.stat().st_size if temp_path.exists() else 0
+                task.bytes_downloaded = resume_from
 
-                # Open file using aiofiles for asynchronous non-blocking disk writes
-                async with aiofiles.open(temp_path, "wb") as f:
-                    last_emit_time = time.time()
+                headers = {}
+                if resume_from > 0:
+                    headers["Range"] = f"bytes={resume_from}-"
+                    logger.info(
+                        "Resuming download from byte %d (attempt %d/%d): %s",
+                        resume_from, attempt, MAX_RETRIES, task.filename,
+                    )
 
-                    # Read response in 512KB chunks
-                    map_stream = response.content.iter_chunked(512 * 1024)
-                    async for chunk in map_stream:
-                        await f.write(chunk)
-                        task.bytes_downloaded += len(chunk)
+                # sock_read=120: timeout if NO bytes received for 120s (stalled)
+                # total=None: never timeout active streaming transfers
+                timeout = aiohttp.ClientTimeout(total=None, connect=30, sock_read=120)
 
-                        # Calculate metrics & throttle WS events to once per second
-                        current_time = time.time()
-                        elapsed = current_time - task.start_time
+                try:
+                    async with (
+                        aiohttp.ClientSession(timeout=timeout) as session,
+                        session.get(task.url, headers=headers) as response,
+                    ):
+                        # 200 = full content, 206 = partial content (resume OK)
+                        if response.status not in (200, 206):
+                            msg = f"HTTP Server returned status code {response.status}"
+                            raise ValueError(msg)
 
-                        if elapsed > 0:
-                            # Speed in Megabytes per second
-                            task.speed_mb = task.bytes_downloaded / (1024 * 1024 * elapsed)
-
-                            if task.bytes_total > task.bytes_downloaded:
-                                remaining_bytes = task.bytes_total - task.bytes_downloaded
-                                task.eta_seconds = remaining_bytes / (
-                                    task.bytes_downloaded / elapsed
-                                )
-                            else:
-                                task.eta_seconds = 0.0
-
-                        # Emit progress update (max once per second)
-                        if current_time - last_emit_time >= 1.0:
-                            last_emit_time = current_time
-                            progress_percent = (
-                                (task.bytes_downloaded / task.bytes_total) * 100
-                                if task.bytes_total > 0
-                                else 0.0
+                        # Update total only on first response (or 200 retry)
+                        if task.bytes_total == 0 or response.status == 200:
+                            task.bytes_total = int(
+                                response.headers.get("content-length", 0)
                             )
-                            progress_payload = DownloadProgressPayload(
-                                task_id=task.task_id,
-                                bytes_downloaded=task.bytes_downloaded,
-                                bytes_total=task.bytes_total,
-                                progress_percent=progress_percent,
-                                speed_mb=task.speed_mb,
-                                eta_seconds=task.eta_seconds,
-                            )
-                            await self._event_bus.publish("download.progress", progress_payload)
+                            if response.status == 206:
+                                # For Range responses, Content-Length is the remaining bytes
+                                # Reconstruct total from Content-Range header if available
+                                content_range = response.headers.get("content-range", "")
+                                if "/" in content_range:
+                                    try:
+                                        task.bytes_total = int(content_range.split("/")[-1])
+                                    except ValueError:
+                                        pass
+
+                        # Open in append mode when resuming, write mode for fresh start
+                        file_mode = "ab" if resume_from > 0 else "wb"
+                        async with aiofiles.open(temp_path, file_mode) as f:
+                            async for chunk in response.content.iter_chunked(CHUNK_SIZE):
+                                # Check cancellation between chunks
+                                if task.status == "cancelled":
+                                    return
+
+                                await f.write(chunk)
+                                task.bytes_downloaded += len(chunk)
+
+                                # Calculate speed & ETA metrics
+                                current_time = time.time()
+                                elapsed = current_time - task.start_time
+                                if elapsed > 0:
+                                    task.speed_mb = task.bytes_downloaded / (
+                                        1024 * 1024 * elapsed
+                                    )
+                                    if task.bytes_total > task.bytes_downloaded:
+                                        remaining = task.bytes_total - task.bytes_downloaded
+                                        task.eta_seconds = remaining / (
+                                            task.bytes_downloaded / elapsed
+                                        )
+                                    else:
+                                        task.eta_seconds = 0.0
+
+                                # Emit progress (throttled to once per second)
+                                if current_time - last_emit_time >= 1.0:
+                                    last_emit_time = current_time
+                                    progress_percent = (
+                                        (task.bytes_downloaded / task.bytes_total) * 100
+                                        if task.bytes_total > 0
+                                        else 0.0
+                                    )
+                                    progress_payload = DownloadProgressPayload(
+                                        task_id=task.task_id,
+                                        bytes_downloaded=task.bytes_downloaded,
+                                        bytes_total=task.bytes_total,
+                                        progress_percent=progress_percent,
+                                        speed_mb=task.speed_mb,
+                                        eta_seconds=task.eta_seconds,
+                                    )
+                                    await self._event_bus.publish(
+                                        "download.progress", progress_payload
+                                    )
+
+                        # Stream completed successfully — break retry loop
+                        break
+
+                except (
+                    aiohttp.ClientError,
+                    aiohttp.ServerDisconnectedError,
+                    aiohttp.ClientPayloadError,
+                    asyncio.TimeoutError,
+                    ConnectionResetError,
+                ) as conn_err:
+                    if task.status == "cancelled":
+                        return
+                    if attempt >= MAX_RETRIES:
+                        raise
+                    # Exponential backoff: 2s, 4s, 8s ... capped at 60s
+                    wait_secs = min(2 ** attempt, 60)
+                    logger.warning(
+                        "Connection error on attempt %d/%d for %s: %s. Retrying in %ds...",
+                        attempt, MAX_RETRIES, task.filename, conn_err, wait_secs,
+                    )
+                    await asyncio.sleep(wait_secs)
+                    continue
 
             # Check if cancelled before finishing
             if task.status == "cancelled":
@@ -253,7 +321,7 @@ class DownloadService:
             task.error_message = str(e)
             logger.error("Download failed for URL %s: %s", task.url, str(e))
 
-            # Clean up temp file on failure
+            # Clean up temp file on permanent failure (not on cancel)
             if temp_path.exists():
                 with contextlib.suppress(Exception):
                     temp_path.unlink()
