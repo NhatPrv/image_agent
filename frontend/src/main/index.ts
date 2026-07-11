@@ -8,24 +8,35 @@ import * as fs from 'fs'
 let pythonProcess: ChildProcess | null = null
 
 function startPythonBackend(): void {
-  // Locate paths relative to dev environment or package directory
-  const possiblePaths = [
+  // Locate paths relative to dev environment or package directory.
+  // During `npm run dev`, app.getAppPath() is typically `frontend/` and
+  // process.cwd() is also `frontend/` (or wherever electron-vite launches from).
+  const possiblePyPaths = [
+    // Dev: frontend/../backend/venv (project root level)
     join(app.getAppPath(), '..', 'backend', 'venv', 'Scripts', 'python.exe'),
+    // Dev: cwd()/../backend/venv (when cwd is frontend/)
+    join(process.cwd(), '..', 'backend', 'venv', 'Scripts', 'python.exe'),
+    // Packaged: resources/backend/venv
+    join(app.getAppPath(), '..', '..', 'backend', 'venv', 'Scripts', 'python.exe'),
     join(process.cwd(), 'backend', 'venv', 'Scripts', 'python.exe'),
     join(app.getAppPath(), 'backend', 'venv', 'Scripts', 'python.exe'),
     'python'
   ]
 
   let pythonExe = 'python'
-  for (const p of possiblePaths) {
-    if (fs.existsSync(p)) {
+  for (const p of possiblePyPaths) {
+    if (p !== 'python' && fs.existsSync(p)) {
       pythonExe = p
       break
     }
   }
 
   const possibleScripts = [
+    // Dev: frontend/../backend/app/main.py
     join(app.getAppPath(), '..', 'backend', 'app', 'main.py'),
+    // Dev: cwd()/../backend/app/main.py
+    join(process.cwd(), '..', 'backend', 'app', 'main.py'),
+    join(app.getAppPath(), '..', '..', 'backend', 'app', 'main.py'),
     join(process.cwd(), 'backend', 'app', 'main.py'),
     join(app.getAppPath(), 'backend', 'app', 'main.py')
   ]
@@ -43,12 +54,16 @@ function startPythonBackend(): void {
     return
   }
 
+  // scriptPath = .../backend/app/main.py → backendDir = .../backend/
   const backendDir = dirname(dirname(scriptPath))
-  console.log(`Launching Python Backend from folder: ${backendDir} using: ${pythonExe}`)
+  console.log(`Launching Python Backend: cwd=${backendDir} python=${pythonExe}`)
 
-  pythonProcess = spawn(pythonExe, ['app/main.py'], {
+  // Use -m flag so Python includes backendDir in sys.path, allowing
+  // 'from app.xyz import ...' to resolve correctly
+  pythonProcess = spawn(pythonExe, ['-m', 'app.main'], {
     cwd: backendDir,
-    env: { ...process.env, PYTHONPATH: backendDir }
+    env: { ...process.env, PYTHONPATH: backendDir },
+    windowsHide: true
   })
 
   pythonProcess.stdout?.on('data', (data) => {

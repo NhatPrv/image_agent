@@ -114,3 +114,14 @@ app.mount(
 )
 
 logger.info("Application initialized. Debug mode: %s", settings.app.debug)
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(
+        "app.main:app",
+        host=settings.server.host,
+        port=settings.server.port,
+        reload=False,  # reload not supported when running as __main__
+        log_level="debug" if settings.app.debug else "info",
+    )
