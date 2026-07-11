@@ -6,24 +6,7 @@
 
 ## Phase Progress
 
-- **Phase 1 — Foundation**: [/]
-  - Recent changes (2026-07-11): backend pipeline dtype guards; `VRAMManager` CPU fallback behavior; added `get_by_path` repo helper; engine enum safety improvements.
-  - Status updates (2026-07-11):
-    - `AI Engine Core` items: some pipeline stability fixes applied — mark as in-progress `[/]` (needs additional testing on CPU/GPU).
-    - `VRAM Manager`: CPU-fallback behavior implemented — `[/]` (monitoring/alerts pending).
-    - `Model repository`: `get_by_path` added — `x` (implemented).
-    - `Frontend — Generate Page` sampler mapping fix — `[/]` (frontend validation fixed; integration testing pending).
-
-- **Phase 2 — Core Features**: [ ]
-  - Recent changes: none
-
-- **Phase 3 — Advanced**: [ ]
-  - Recent changes: none
-
-- **Phase 4+**: [ ]
-  - Recent changes: none
-
-> Notes: This section tracks progress per phase. Use the checkboxes to indicate overall phase status: `[ ]` not started, `[/]` in progress, `[x]` completed.
+> Use the checkboxes on each task and the legend below as the single source of truth. Do not add additional summary notes here.
 
 
 ## Legend
