@@ -18,7 +18,7 @@ router = APIRouter(prefix="/system", tags=["System"])
 
 @router.get("/info", response_model=SystemStatsResponse)
 async def get_system_info(
-    service: SystemService = Depends(get_system_service),
+    service: "SystemService" = Depends(get_system_service),
 ) -> SystemStatsResponse:
     """Retrieve active platform specs and resource consumption stats (CPU, RAM, GPU, Disk)."""
     try:

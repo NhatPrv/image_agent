@@ -23,7 +23,7 @@ ModelInfoResponse.model_rebuild()
 
 @router.get("", response_model=list[ModelInfoResponse])
 async def list_models(
-    service: ModelService = Depends(get_model_service),
+    service: "ModelService" = Depends(get_model_service),
 ) -> list[ModelInfoResponse]:
     """Retrieve list of all registered models from the database."""
     return await service.get_all_models()
@@ -31,7 +31,7 @@ async def list_models(
 
 @router.post("/scan", response_model=list[ModelInfoResponse])
 async def scan_models(
-    service: ModelService = Depends(get_model_service),
+    service: "ModelService" = Depends(get_model_service),
 ) -> list[ModelInfoResponse]:
     """Trigger recursive model folder scan and register new models."""
     try:
@@ -45,16 +45,24 @@ async def scan_models(
 
 @router.get("/active", response_model=ModelInfoResponse | None)
 async def get_active_model(
-    service: ModelService = Depends(get_model_service),
+    service: "ModelService" = Depends(get_model_service),
 ) -> ModelInfoResponse | None:
     """Retrieve details of the active model currently residing in memory."""
+    return await service.get_active_model()
+
+
+@router.get("/loaded", response_model=ModelInfoResponse | None)
+async def get_loaded_model_compat(
+    service: "ModelService" = Depends(get_model_service),
+) -> ModelInfoResponse | None:
+    """Backward-compatible alias for clients still using `/models/loaded`."""
     return await service.get_active_model()
 
 
 @router.post("/load", status_code=status.HTTP_200_OK)
 async def load_model(
     payload: ModelLoadRequest,
-    service: ModelService = Depends(get_model_service),
+    service: "ModelService" = Depends(get_model_service),
 ) -> dict[str, str]:
     """Load a specific model into GPU VRAM."""
     try:
@@ -69,7 +77,7 @@ async def load_model(
 
 @router.post("/unload", status_code=status.HTTP_200_OK)
 async def unload_model(
-    service: ModelService = Depends(get_model_service),
+    service: "ModelService" = Depends(get_model_service),
 ) -> dict[str, str]:
     """Unload active model and purge GPU CUDA memory block cache."""
     try:

@@ -6,6 +6,7 @@ of image generation tasks.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from pathlib import Path
@@ -113,35 +114,35 @@ class GenerationService:
             raise GenerationNotFoundError(msg, generation_id=generation_id)
 
         # Update status to RUNNING in database
-        entity.status = GenerationStatus.RUNNING
+        entity.status = GenerationStatus.GENERATING
         await self._generation_repo.update(entity)
 
         start_time = time.perf_counter()
+
+        # Capture the main event loop reference before entering executor
+        _main_loop = asyncio.get_running_loop()
 
         # Define progress event bridge
         def _on_progress(progress: GenerationProgress):
             # Publish event to event bus to notify WebSocket clients in real-time.
             # The pipeline runs in loop.run_in_executor, which executes in a thread pool.
             # Therefore, we cannot directly await self._event_bus.publish.
-            # Instead, we schedule it back into the main event loop.
-            import asyncio
-
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.run_coroutine_threadsafe(
-                    self._event_bus.publish(
-                        "generation.progress",
-                        {
-                            "generation_id": progress.generation_id,
-                            "current_step": progress.current_step,
-                            "total_steps": progress.total_steps,
-                            "progress_percent": progress.progress_percent,
-                            "elapsed_ms": progress.elapsed_ms,
-                            "estimated_remaining_ms": progress.estimated_remaining_ms,
-                        },
-                    ),
-                    loop,
-                )
+            # Instead, we schedule it back into the main event loop using the
+            # captured _main_loop reference.
+            asyncio.run_coroutine_threadsafe(
+                self._event_bus.publish(
+                    "generation.progress",
+                    {
+                        "generation_id": progress.generation_id,
+                        "current_step": progress.current_step,
+                        "total_steps": progress.total_steps,
+                        "progress_percent": progress.progress_percent,
+                        "elapsed_ms": progress.elapsed_ms,
+                        "estimated_remaining_ms": progress.estimated_remaining_ms,
+                    },
+                ),
+                _main_loop,
+            )
 
         try:
             # Add generation_id to params extra dict to thread it down

@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 @router.get("", response_model=SettingsSchema)
 async def get_settings(
-    settings: Settings = Depends(get_settings_dep),
+    settings: "Settings" = Depends(get_settings_dep),
 ) -> SettingsSchema:
     """Retrieve current runtime configuration settings."""
     # Convert Settings object properties to dictionary layout
@@ -61,8 +61,8 @@ async def get_settings(
 @router.put("", response_model=SettingsSchema)
 async def update_settings(
     payload: SettingsSchema,
-    settings: Settings = Depends(get_settings_dep),
-    repo: ISettingsRepository = Depends(get_settings_repository),
+    settings: "Settings" = Depends(get_settings_dep),
+    repo: "ISettingsRepository" = Depends(get_settings_repository),
 ) -> SettingsSchema:
     """Update runtime settings and persist key-value pairs into SQLite database."""
     try:

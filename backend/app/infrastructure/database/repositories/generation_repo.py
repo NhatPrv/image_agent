@@ -100,6 +100,10 @@ class SQLAlchemyGenerationRepository(BaseRepository[GenerationModel], IGeneratio
             # Note: completed outputs are mapped via image records separately in image_repo
             await self._session.flush()
 
+    async def update(self, entity: GenerationEntity) -> None:
+        """Update an existing generation entity (alias for save)."""
+        await self.save(entity)
+
     async def get_recent(self, limit: int = 50) -> list[GenerationEntity]:
         """Fetch recently created generation entities (no offset)."""
         result = await self._session.execute(

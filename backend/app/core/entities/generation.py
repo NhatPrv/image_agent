@@ -103,6 +103,18 @@ class GenerationEntity(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+    @classmethod
+    def create(cls, params: GenerationParams) -> GenerationEntity:
+        """Create a new generation entity from parameters."""
+        import uuid
+        return cls(
+            id=uuid.uuid4().hex,
+            params=params,
+            status=GenerationStatus.PENDING,
+            created_at=datetime.utcnow(),
+        )
+
+
 class GenerationProgress(BaseModel):
     """Real-time progress update during generation."""
 

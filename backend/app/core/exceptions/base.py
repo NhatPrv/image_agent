@@ -133,12 +133,13 @@ class GenerationError(EngineError):
         self,
         message: str = "Image generation failed",
         *,
+        error_code: str = "GENERATION_ERROR",
         generation_id: str = "",
         details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(
             message,
-            error_code="GENERATION_ERROR",
+            error_code=error_code,
             details={"generation_id": generation_id, **(details or {})},
         )
 

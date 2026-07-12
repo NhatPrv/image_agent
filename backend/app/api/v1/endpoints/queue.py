@@ -21,7 +21,7 @@ QueueItemResponse.model_rebuild()
 
 @router.get("", response_model=list[QueueItemResponse])
 async def list_queue(
-    manager: IQueueManager = Depends(get_queue_manager),
+    manager: "IQueueManager" = Depends(get_queue_manager),
 ) -> list[QueueItemResponse]:
     """Retrieve all prioritized queue items currently waiting or executing."""
     items = await manager.get_all()
@@ -31,7 +31,7 @@ async def list_queue(
 @router.post("/{item_id}/cancel", response_model=QueueItemResponse)
 async def cancel_queue_item(
     item_id: str,
-    manager: IQueueManager = Depends(get_queue_manager),
+    manager: "IQueueManager" = Depends(get_queue_manager),
 ) -> QueueItemResponse:
     """Cancel a waiting queue item and remove it from scheduling list."""
     try:
@@ -46,7 +46,7 @@ async def cancel_queue_item(
 
 @router.delete("", status_code=status.HTTP_200_OK)
 async def clear_queue(
-    manager: IQueueManager = Depends(get_queue_manager),
+    manager: "IQueueManager" = Depends(get_queue_manager),
 ) -> dict[str, str]:
     """Clear all waiting items from the scheduling list."""
     try:

@@ -24,7 +24,7 @@ GenerationResponse.model_rebuild()
 @router.post("", response_model=GenerationResponse, status_code=status.HTTP_201_CREATED)
 async def create_generation(
     payload: GenerateRequest,
-    service: GenerationService = Depends(get_generation_service),
+    service: "GenerationService" = Depends(get_generation_service),
 ) -> GenerationResponse:
     """Submit a generation request to the priority queue."""
     # Convert DTO schema to core GenerationParams entity helper
@@ -46,7 +46,10 @@ async def create_generation(
 
     try:
         entity = await service.create_generation(params, payload.priority)
-        return GenerationResponse.model_validate(entity)
+        # Convert entity to dict, then manually convert params to dict
+        entity_dict = entity.model_dump()
+        entity_dict["params"] = entity.params.model_dump()
+        return GenerationResponse(**entity_dict)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -58,7 +61,7 @@ async def create_generation(
 async def list_history(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    service: GenerationService = Depends(get_generation_service),
+    service: "GenerationService" = Depends(get_generation_service),
 ) -> list[GenerationResponse]:
     """Retrieve historical logs of all generations with offset pagination."""
     entities = await service.get_all_generations(limit=limit, offset=offset)
@@ -68,7 +71,7 @@ async def list_history(
 @router.get("/{generation_id}", response_model=GenerationResponse)
 async def get_generation_status(
     generation_id: str,
-    service: GenerationService = Depends(get_generation_service),
+    service: "GenerationService" = Depends(get_generation_service),
 ) -> GenerationResponse:
     """Retrieve metadata details and file output paths for a single generation."""
     try:

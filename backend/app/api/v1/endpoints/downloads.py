@@ -36,7 +36,7 @@ class DownloadRequest(BaseModel):
 @router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_download(
     request: DownloadRequest,
-    download_service: DownloadService = Depends(get_download_service),
+    download_service: "DownloadService" = Depends(get_download_service),
 ) -> dict:
     """Submit a download request to run in the background."""
     try:
@@ -55,7 +55,7 @@ async def create_download(
 
 @router.get("", response_model=list[dict])
 async def list_downloads(
-    download_service: DownloadService = Depends(get_download_service),
+    download_service: "DownloadService" = Depends(get_download_service),
 ) -> list[dict]:
     """Retrieve all active and finished download tasks."""
     return download_service.get_all_tasks()
@@ -64,7 +64,7 @@ async def list_downloads(
 @router.get("/{task_id}", response_model=dict)
 async def get_download_status(
     task_id: str,
-    download_service: DownloadService = Depends(get_download_service),
+    download_service: "DownloadService" = Depends(get_download_service),
 ) -> dict:
     """Get status of a specific download task."""
     task = download_service.get_task(task_id)
@@ -79,7 +79,7 @@ async def get_download_status(
 @router.post("/{task_id}/cancel", response_model=dict)
 async def cancel_download_task(
     task_id: str,
-    download_service: DownloadService = Depends(get_download_service),
+    download_service: "DownloadService" = Depends(get_download_service),
 ) -> dict:
     """Request immediate cancellation of a running download task."""
     cancelled = await download_service.cancel_download(task_id)

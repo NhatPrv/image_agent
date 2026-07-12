@@ -98,7 +98,7 @@ async def websocket_event_bridge(event_type: str, data: Any) -> None:
     await manager.broadcast(packet)
 
 
-def register_event_bridge(event_bus: IEventBus) -> None:
+def register_event_bridge(event_bus: "IEventBus") -> None:
     """Register the event bridge handler for all generation and model events."""
     global _bridge_registered
     if _bridge_registered:
@@ -137,7 +137,7 @@ def register_event_bridge(event_bus: IEventBus) -> None:
 # ─── Periodic System Stats Broadcast Loop ───
 
 
-async def start_system_monitor_loop(system_service: SystemService) -> None:
+async def start_system_monitor_loop(system_service: "SystemService") -> None:
     """Background task loop broadcasting system/VRAM stats to clients."""
     global _stats_monitor_task
     if _stats_monitor_task is not None:
@@ -180,8 +180,8 @@ def stop_system_monitor_loop() -> None:
 @router.websocket("/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
-    event_bus: IEventBus = Depends(get_event_bus),
-    system_service: SystemService = Depends(get_system_service),
+    event_bus: "IEventBus" = Depends(get_event_bus),
+    system_service: "SystemService" = Depends(get_system_service),
 ) -> None:
     """FastAPI WebSocket endpoint for real-time progress and hardware telemetry."""
     # Ensure bridge handlers and monitoring loop are initialized

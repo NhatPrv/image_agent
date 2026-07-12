@@ -1,0 +1,14 @@
+{
+  "name": "image_agent",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "serve": "vite preview"
+  },
+  "devDependencies": {
+    "electron": "^43.1.0",
+    "vite": "^8.1.4"
+  }
+}

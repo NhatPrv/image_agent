@@ -172,7 +172,10 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
                 )
                 return output.images
 
-            return await loop.run_in_executor(None, _run_inference)
+            # Run inference in executor - capture loop reference so callback
+            # can schedule async tasks on the main event loop from any thread.
+            result = await loop.run_in_executor(None, _run_inference)
+            return result
         except Exception as e:
             logger.error("Error during inference execution: %s", str(e))
             msg = f"Inference execution failed: {e}"
