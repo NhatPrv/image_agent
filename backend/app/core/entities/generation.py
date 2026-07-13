@@ -27,8 +27,8 @@ class GenerationParams(BaseModel):
     type: GenerationType = GenerationType.TEXT_TO_IMAGE
     prompt: str = Field(..., min_length=1, max_length=2000)
     negative_prompt: str = Field(default="", max_length=2000)
-    width: int = Field(default=512, ge=64, le=2048)
-    height: int = Field(default=512, ge=64, le=2048)
+    width: int = Field(default=512, ge=64, le=8192)
+    height: int = Field(default=512, ge=64, le=8192)
     steps: int = Field(default=20, ge=1, le=150)
     cfg_scale: float = Field(default=7.0, ge=1.0, le=30.0)
     seed: int = Field(default=-1, ge=-1)
