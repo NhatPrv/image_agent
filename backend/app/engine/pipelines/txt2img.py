@@ -10,6 +10,7 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
 import torch
 from diffusers import StableDiffusionPipeline
 
@@ -203,7 +204,7 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
 
                 base_images = await loop.run_in_executor(None, _run_pass1)
 
-                # Pass 2: Upscale and run Img2Img
+                # Pass 2: Upscale and run Tiled Img2Img
                 from diffusers import StableDiffusionImg2ImgPipeline
                 from PIL import Image as PILImage
 
@@ -214,19 +215,40 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
                 self.pipeline = img2img_pipe
                 self.apply_high_res_optimizations(params.width, params.height)
 
-                # Configure Pass 2 steps end callback (70% to 100% progress)
+                # Configure Pass 2 grid for Tiled Upscaling
+                tile_size = 512
+                overlap = 64
+
+                def get_grid_coords(total_size: int, tile_s: int, over: int) -> list[int]:
+                    if total_size <= tile_s:
+                        return [0]
+                    coords = []
+                    c = 0
+                    stride = tile_s - over
+                    while c + tile_s < total_size:
+                        coords.append(c)
+                        c += stride
+                    coords.append(total_size - tile_s)
+                    return coords
+
+                x_coords = get_grid_coords(params.width, tile_size, overlap)
+                y_coords = get_grid_coords(params.height, tile_size, overlap)
+                total_tiles = len(x_coords) * len(y_coords)
+
                 pass2_steps = max(1, int(total_steps * 0.35))
-                combined_total_steps = total_steps + pass2_steps
+                total_pass2_steps = total_tiles * pass2_steps
+                combined_total_steps = total_steps + total_pass2_steps
 
                 def _step_callback_pass2(
                     _pipe_self,
                     step: int,
                     _timestep: int,
                     callback_kwargs: dict[str, Any],
+                    tile_idx: int,
                 ) -> dict[str, Any]:
                     if progress_callback:
                         elapsed_ms = int((time.perf_counter() - start_time) * 1000.0)
-                        current_combined_step = total_steps + step
+                        current_combined_step = total_steps + tile_idx * pass2_steps + step
                         avg_step_time = (
                             (elapsed_ms / current_combined_step)
                             if current_combined_step > 0
@@ -252,6 +274,16 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
                         progress_callback(progress_data)
                     return callback_kwargs
 
+                # Precompute 2D linear blending mask
+                mask_np = np.ones((tile_size, tile_size), dtype=np.float32)
+                for i in range(overlap):
+                    val = i / overlap
+                    mask_np[i, :] *= val
+                    mask_np[-1 - i, :] *= val
+                    mask_np[:, i] *= val
+                    mask_np[:, -1 - i] *= val
+                mask_3d = np.expand_dims(mask_np, axis=-1)
+
                 final_images = []
                 for base_img in base_images:
                     # Upscale using Lanczos interpolation
@@ -260,22 +292,63 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
                         resample=PILImage.Resampling.LANCZOS,
                     )
 
-                    def _run_pass2(img=upscaled_img):
-                        output = img2img_pipe(
-                            prompt=params.prompt,
-                            negative_prompt=params.negative_prompt,
-                            image=img,
-                            # Low denoising strength to add details but preserve layout
-                            strength=0.35,
-                            num_inference_steps=params.steps,
-                            guidance_scale=params.cfg_scale,
-                            generator=generator,
-                            callback_on_step_end=_step_callback_pass2,
-                            callback_on_step_end_tensor_inputs=["latents"],
-                        )
-                        return output.images[0]
+                    def _run_tiled_upscale(img=upscaled_img):
+                        # Initialize accumulator canvas
+                        canvas = np.zeros((params.height, params.width, 3), dtype=np.float32)
+                        weights = np.zeros((params.height, params.width, 1), dtype=np.float32)
+                        img_np = np.array(img).astype(np.float32) / 255.0
 
-                    final_img = await loop.run_in_executor(None, _run_pass2)
+                        t_idx = 0
+                        for y in y_coords:
+                            for x in x_coords:
+                                # Crop tile from upscaled image
+                                tile_np = img_np[y : y + tile_size, x : x + tile_size, :3]
+                                tile_img = PILImage.fromarray((tile_np * 255.0).astype(np.uint8))
+
+                                # Bind local callback for this tile index
+                                def _local_callback(
+                                    pipe_self,
+                                    step,
+                                    timestep,
+                                    callback_kwargs,
+                                    current_t_idx=t_idx,
+                                ):
+                                    return _step_callback_pass2(
+                                        pipe_self,
+                                        step,
+                                        timestep,
+                                        callback_kwargs,
+                                        current_t_idx,
+                                    )
+
+                                # Denoise tile at 512x512 - 100% OOM Safe!
+                                output = img2img_pipe(
+                                    prompt=params.prompt,
+                                    negative_prompt=params.negative_prompt,
+                                    image=tile_img,
+                                    strength=0.35,
+                                    num_inference_steps=params.steps,
+                                    guidance_scale=params.cfg_scale,
+                                    generator=generator,
+                                    callback_on_step_end=_local_callback,
+                                    callback_on_step_end_tensor_inputs=["latents"],
+                                )
+
+                                output_tile = np.array(output.images[0]).astype(np.float32) / 255.0
+
+                                # Accumulate
+                                canvas[y : y + tile_size, x : x + tile_size, :3] += (
+                                    output_tile * mask_3d
+                                )
+                                weights[y : y + tile_size, x : x + tile_size, :] += mask_3d
+                                t_idx += 1
+
+                        # Blend and normalize grid
+                        final_np = np.where(weights > 0, canvas / weights, img_np)
+                        final_np = np.clip(final_np * 255.0, 0, 255).astype(np.uint8)
+                        return PILImage.fromarray(final_np)
+
+                    final_img = await loop.run_in_executor(None, _run_tiled_upscale)
                     final_images.append(final_img)
 
                 # Restore original text-to-image pipeline reference
