@@ -371,6 +371,13 @@ export function GenerateView(): React.JSX.Element {
                   '1600x900',
                   '1920x1080',
                   '1920x1200',
+                  '2560x1440',
+                  '1440x2560',
+                  '2560x1600',
+                  '3440x1440',
+                  '2880x1800',
+                  '3000x2000',
+                  '3200x2000',
                   '3840x2160',
                   '2160x3840',
                   '7680x4320',
@@ -400,15 +407,27 @@ export function GenerateView(): React.JSX.Element {
                 <option value="1080x1920">Mobile FHD (1080x1920 - 9:16)</option>
                 <option value="1080x2340">Mobile Ultra (1080x2340 - 19.5:9)</option>
               </optgroup>
-              <optgroup label="Tablet Devices" className="bg-slate-950 text-slate-400">
+              <optgroup label="Tablet & iPad Devices" className="bg-slate-950 text-slate-400">
                 <option value="768x1024">Tablet Portrait (768x1024 - 3:4)</option>
                 <option value="1024x768">Tablet Landscape (1024x768 - 4:3)</option>
               </optgroup>
-              <optgroup label="Desktop Screen Presets" className="bg-slate-950 text-slate-400">
+              <optgroup label="Desktop FHD Screen Presets" className="bg-slate-950 text-slate-400">
                 <option value="1280x720">Desktop HD (1280x720 - 16:9)</option>
                 <option value="1600x900">Desktop HD+ (1600x900 - 16:9)</option>
                 <option value="1920x1080">Desktop FHD (1920x1080 - 16:9)</option>
                 <option value="1920x1200">Desktop Wide (1920x1200 - 16:10)</option>
+              </optgroup>
+              <optgroup
+                label="Desktop 2K / 3K Screen Presets"
+                className="bg-slate-950 text-slate-400"
+              >
+                <option value="2560x1440">2K QHD Desktop (2560x1440 - 16:9)</option>
+                <option value="1440x2560">2K QHD Mobile (1440x2560 - 9:16)</option>
+                <option value="2560x1600">Laptop WQXGA / Legion 5 Pro (2560x1600 - 16:10)</option>
+                <option value="3440x1440">Ultrawide QHD (3440x1440 - 21:9)</option>
+                <option value="2880x1800">3K Retina Laptop (2880x1800 - 16:10)</option>
+                <option value="3000x2000">3K Surface / Display (3000x2000 - 3:2)</option>
+                <option value="3200x2000">3.2K Laptop Screen (3200x2000 - 16:10)</option>
               </optgroup>
               <optgroup label="UHD 4K / 8K Presets" className="bg-slate-950 text-slate-400">
                 <option value="3840x2160">UHD 4K Landscape (3840x2160)</option>
