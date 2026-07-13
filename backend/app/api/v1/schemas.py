@@ -52,8 +52,8 @@ class GenerateRequest(BaseModel):
 
     prompt: str = Field(..., min_length=1, description="Text prompt guiding the image generation.")
     negative_prompt: str = Field(default="", description="Text prompt specifying what to avoid.")
-    width: int = Field(default=512, ge=128, le=2048)
-    height: int = Field(default=512, ge=128, le=2048)
+    width: int = Field(default=512, ge=128, le=8192)
+    height: int = Field(default=512, ge=128, le=8192)
     steps: int = Field(default=20, ge=1, le=150)
     cfg_scale: float = Field(default=7.5, ge=1.0, le=30.0)
     seed: int = Field(default=-1, description="-1 represents random seed initialization.")

@@ -261,7 +261,17 @@ export function GenerateView(): React.JSX.Element {
       })
       if (!response.ok) {
         const errDetail = await response.json()
-        throw new Error(errDetail.detail || 'Failed submission.')
+        let errorString = 'Failed submission.'
+        if (errDetail && errDetail.detail) {
+          if (Array.isArray(errDetail.detail)) {
+            errorString = errDetail.detail
+              .map((e: { loc: (string | number)[]; msg: string }) => `${e.loc.join('.')}: ${e.msg}`)
+              .join(', ')
+          } else {
+            errorString = String(errDetail.detail)
+          }
+        }
+        throw new Error(errorString)
       }
       const data = await response.json()
       addHistoryItem(data)
