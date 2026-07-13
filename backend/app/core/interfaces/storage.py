@@ -73,3 +73,14 @@ class IStorage(ABC):
         Returns:
             True if file exists, False otherwise.
         """
+
+    @abstractmethod
+    def get_thumbnail_path(self, image_path: str) -> str:
+        """Get the absolute thumbnail path for a given image path.
+
+        Args:
+            image_path: Path to the original full-size image.
+
+        Returns:
+            The absolute path of the corresponding thumbnail.
+        """

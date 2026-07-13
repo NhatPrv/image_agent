@@ -15,6 +15,7 @@ from app.core.enums.model_type import ModelArchitecture
 from app.core.exceptions.base import EngineError, ModelNotLoadedError
 from app.core.interfaces.ai_engine import IAIEngine
 from app.engine.pipelines.img2img import Img2ImgPipeline
+from app.engine.pipelines.inpaint import InpaintPipeline
 from app.engine.pipelines.txt2img import Txt2ImgPipeline
 from app.engine.vram_manager import VRAMManager
 
@@ -56,6 +57,7 @@ class AIEngineManager(IAIEngine):
         self._active_model_info: ModelInfo | None = None
         self._txt2img_pipeline: Txt2ImgPipeline | None = None
         self._img2img_pipeline: Img2ImgPipeline | None = None
+        self._inpaint_pipeline: InpaintPipeline | None = None
 
     async def generate(
         self,
@@ -113,6 +115,33 @@ class AIEngineManager(IAIEngine):
                     params, generation_id, progress_callback
                 )
                 dir_name = "img2img"
+            elif params.type == GenerationType.INPAINT:
+                # Share components from active pipelines if loaded to save time/VRAM
+                if self._inpaint_pipeline is None:
+                    self._inpaint_pipeline = InpaintPipeline(self._settings)
+                    has_txt2img = (
+                        self._txt2img_pipeline is not None
+                        and self._txt2img_pipeline.pipeline is not None
+                    )
+                    has_img2img = (
+                        self._img2img_pipeline is not None
+                        and self._img2img_pipeline.pipeline is not None
+                    )
+                    if has_txt2img:
+                        self._inpaint_pipeline.load_from_components(
+                            self._txt2img_pipeline.pipeline.components
+                        )
+                    elif has_img2img:
+                        self._inpaint_pipeline.load_from_components(
+                            self._img2img_pipeline.pipeline.components
+                        )
+                    else:
+                        await self._inpaint_pipeline.load(model_path)
+
+                pil_images = await self._inpaint_pipeline.generate(
+                    params, generation_id, progress_callback
+                )
+                dir_name = "inpaint"
             else:
                 msg = f"Generation type '{params.type}' not supported in this version."
                 raise EngineError(msg)
@@ -132,18 +161,6 @@ class AIEngineManager(IAIEngine):
 
             duration_ms = int((time.perf_counter() - start_time) * 1000.0)
 
-            # Emit completed event
-            await self._event_bus.publish(
-                "generation.completed",
-                {
-                    "generation_id": generation_id,
-                    "output_images": output_paths,
-                    # Replace with actual generator seed if parsed dynamically
-                    "seed_used": params.seed,
-                    "completed_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-                    "duration_ms": duration_ms,
-                },
-            )
             return output_paths
 
         except Exception as e:
@@ -237,6 +254,7 @@ class AIEngineManager(IAIEngine):
         # 1. Delete pipeline references to free tensors
         self._txt2img_pipeline = None
         self._img2img_pipeline = None
+        self._inpaint_pipeline = None
 
         # 2. Force PyTorch garbage collection and empty CUDA cache
         self._vram_manager.clean_memory()

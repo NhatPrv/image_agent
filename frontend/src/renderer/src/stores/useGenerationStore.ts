@@ -10,8 +10,9 @@ export interface GenerationParams {
   seed: number
   sampler: string
   model_id: string
-  type: 'txt2img' | 'img2img'
+  type: 'txt2img' | 'img2img' | 'inpaint'
   input_image_path?: string
+  mask_image_path?: string
   denoise_strength?: number
 }
 
@@ -48,8 +49,9 @@ interface GenerationState {
   seed: number
   sampler: string
   modelId: string
-  type: 'txt2img' | 'img2img'
+  type: 'txt2img' | 'img2img' | 'inpaint'
   inputImagePath: string | null
+  maskImagePath: string | null
   denoiseStrength: number
 
   // Active status
@@ -99,6 +101,7 @@ export const useGenerationStore = create<GenerationState>((set) => ({
   modelId: '',
   type: 'txt2img',
   inputImagePath: null,
+  maskImagePath: null,
   denoiseStrength: 0.75,
 
   generating: false,

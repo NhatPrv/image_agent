@@ -115,6 +115,8 @@ class LocalFileStorage(IStorage):
     async def delete_image(self, file_path: str) -> None:
         """Delete an image and its corresponding thumbnail from disk."""
         img_path = Path(file_path)
+        if not img_path.is_absolute():
+            img_path = self._settings.paths.outputs_dir / img_path
         loop = asyncio.get_running_loop()
 
         def _delete_files():
@@ -142,3 +144,11 @@ class LocalFileStorage(IStorage):
         """Check if a file exists on disk asynchronously."""
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, lambda: Path(file_path).exists())
+
+    def get_thumbnail_path(self, image_path: str) -> str:
+        """Get the absolute thumbnail path for a given image path."""
+        img_path = Path(image_path)
+        thumbnail_dir = self._settings.paths.thumbnails_dir
+        thumbnail_filename = f"{img_path.stem}_thumb.webp"
+        thumbnail_path = thumbnail_dir / thumbnail_filename
+        return str(thumbnail_path.resolve())

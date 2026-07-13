@@ -61,6 +61,7 @@ def test_vram_manager_monitoring(mock_get_properties, mock_is_available):
     settings.gpu.max_vram_usage_mb = 6000.0
 
     manager = VRAMManager(settings)
+    manager._nvml_initialized = False
 
     # Verify get_vram_info fallback (PyTorch values)
     with (

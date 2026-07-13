@@ -6,7 +6,10 @@ import { ipcRenderer } from 'electron'
 // Custom APIs for renderer
 const api = {
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
-  getBackendStatus: () => ipcRenderer.invoke('get-backend-status')
+  getBackendStatus: () => ipcRenderer.invoke('get-backend-status'),
+  selectImage: () => ipcRenderer.invoke('select-image'),
+  saveTempImage: (base64Data: string, filename: string) =>
+    ipcRenderer.invoke('save-temp-image', base64Data, filename)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

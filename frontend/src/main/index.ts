@@ -145,6 +145,31 @@ app.whenReady().then(() => {
     }
   })
 
+  ipcMain.handle('select-image', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }]
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      return null
+    }
+    return result.filePaths[0]
+  })
+
+  ipcMain.handle('save-temp-image', async (_event, base64Data: string, filename: string) => {
+    try {
+      const base64Clean = base64Data.replace(/^data:image\/\w+;base64,/, '')
+      const buffer = Buffer.from(base64Clean, 'base64')
+      const tempDir = app.getPath('temp')
+      const filePath = join(tempDir, filename)
+      await fs.promises.writeFile(filePath, buffer)
+      return filePath
+    } catch (err) {
+      console.error('Failed to save temporary image:', err)
+      throw err
+    }
+  })
+
   // Start Python Process
   startPythonBackend()
 

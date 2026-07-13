@@ -60,9 +60,10 @@ class GenerateRequest(BaseModel):
     sampler: SchedulerType = Field(default=SchedulerType.EULER_A)
     model_id: str = Field(..., description="ID of the model to execute inference against.")
 
-    # Img2Img specific
+    # Img2Img / Inpaint specific
     type: GenerationType = Field(default=GenerationType.TEXT_TO_IMAGE)
     input_image_path: str | None = Field(default=None)
+    mask_image_path: str | None = Field(default=None)
     denoise_strength: float = Field(default=0.75, ge=0.0, le=1.0)
 
     # Scheduler priority

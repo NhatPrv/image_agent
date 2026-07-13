@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { useGenerationStore } from '../stores/useGenerationStore'
 import { useModelStore } from '../stores/useModelStore'
 import { useSystemStore } from '../stores/useSystemStore'
-import { Sparkles, Sliders, Image, Zap, RefreshCw, XCircle } from 'lucide-react'
+import { Sparkles, Sliders, Image, Zap, RefreshCw, XCircle, FileImage, Upload } from 'lucide-react'
+import { CanvasMaskEditor } from '../components/CanvasMaskEditor'
 
 export function GenerateView(): React.JSX.Element {
   const connected = useSystemStore((state) => state.connected)
@@ -17,6 +18,9 @@ export function GenerateView(): React.JSX.Element {
   const seed = useGenerationStore((state) => state.seed)
   const sampler = useGenerationStore((state) => state.sampler)
   const selectedModelId = useGenerationStore((state) => state.modelId)
+  const type = useGenerationStore((state) => state.type)
+  const inputImagePath = useGenerationStore((state) => state.inputImagePath)
+  const denoiseStrength = useGenerationStore((state) => state.denoiseStrength)
 
   const generating = useGenerationStore((state) => state.generating)
   const progress = useGenerationStore((state) => state.progress)
@@ -24,6 +28,7 @@ export function GenerateView(): React.JSX.Element {
   const totalSteps = useGenerationStore((state) => state.totalSteps)
   const previewImage = useGenerationStore((state) => state.previewImage)
   const currentGenId = useGenerationStore((state) => state.currentGenerationId)
+  const history = useGenerationStore((state) => state.history)
 
   const setPrompt = useGenerationStore((state) => state.setPrompt)
   const setNegativePrompt = useGenerationStore((state) => state.setNegativePrompt)
@@ -39,6 +44,22 @@ export function GenerateView(): React.JSX.Element {
   const [outputImage, setOutputImage] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [isScanning, setIsScanning] = useState(false)
+  const [tempMaskBase64, setTempMaskBase64] = useState<string | null>(null)
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'editor' | 'output'>('editor')
+
+  // Automatically display the latest generated image when history is updated
+  useEffect(() => {
+    if (history.length > 0) {
+      const latest = history[0]
+      if (latest.status === 'completed' && latest.images.length > 0) {
+        const imagePath = latest.images[0].path.replace(/\\/g, '/')
+        setTimeout(() => {
+          setOutputImage(`http://127.0.0.1:8000/outputs/${imagePath}`)
+          setActiveWorkspaceTab('output')
+        }, 0)
+      }
+    }
+  }, [history])
 
   // Fetch models on component mount
   useEffect(() => {
@@ -103,12 +124,40 @@ export function GenerateView(): React.JSX.Element {
 
     // Map UI sampler labels to backend scheduler keys
     const samplerMap: Record<string, string> = {
-      'Euler': 'euler',
+      Euler: 'euler',
       'Euler A': 'euler_a',
       'DPM++ 2M': 'dpm_pp_2m',
       'DPM++ 2M Karras': 'dpm_pp_2m_karras',
-      'Heun': 'heun',
-      'UniPC': 'unipc'
+      Heun: 'heun',
+      UniPC: 'unipc'
+    }
+
+    let finalInputPath: string | undefined = undefined
+    let finalMaskPath: string | undefined = undefined
+
+    if (type === 'img2img') {
+      if (!inputImagePath) {
+        setErrorMsg('Please select an input image first.')
+        return
+      }
+      finalInputPath = inputImagePath
+    } else if (type === 'inpaint') {
+      if (!inputImagePath || !tempMaskBase64) {
+        setErrorMsg('Please select an image and draw a mask first.')
+        return
+      }
+      try {
+        // Save base64 mask drawing to temporary file path via Electron IPC
+        const savedMaskPath = await window.api.saveTempImage(
+          tempMaskBase64,
+          `mask_${Date.now()}.png`
+        )
+        finalInputPath = inputImagePath
+        finalMaskPath = savedMaskPath
+      } catch (err) {
+        setErrorMsg('Failed to save drawn mask: ' + (err as Error).message)
+        return
+      }
     }
 
     const payload = {
@@ -121,7 +170,10 @@ export function GenerateView(): React.JSX.Element {
       seed: seed === -1 ? Math.floor(Math.random() * 9999999) : seed,
       sampler: samplerMap[sampler] ?? sampler.toLowerCase(),
       model_id: targetModel,
-      type: 'txt2img',
+      type,
+      input_image_path: finalInputPath,
+      mask_image_path: finalMaskPath,
+      denoise_strength: type !== 'txt2img' ? denoiseStrength : undefined,
       priority: 'normal'
     }
 
@@ -173,6 +225,29 @@ export function GenerateView(): React.JSX.Element {
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isScanning ? 'animate-spin' : ''}`} />
           </button>
+        </div>
+
+        {/* Generation Mode Tabs */}
+        <div className="grid grid-cols-3 gap-1 bg-slate-900/50 p-1 rounded-xl border border-slate-900">
+          {(['txt2img', 'img2img', 'inpaint'] as const).map((m) => {
+            const labels = { txt2img: 'Text', img2img: 'Image', inpaint: 'Inpaint' }
+            const active = type === m
+            return (
+              <button
+                key={m}
+                type="button"
+                disabled={generating}
+                onClick={() => setParams({ type: m })}
+                className={`py-1.5 text-[10px] font-bold rounded-lg uppercase tracking-wider transition cursor-pointer ${
+                  active
+                    ? 'bg-violet-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
+                }`}
+              >
+                {labels[m]}
+              </button>
+            )
+          })}
         </div>
 
         {/* Model Selection Dropdown */}
@@ -298,6 +373,85 @@ export function GenerateView(): React.JSX.Element {
             className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition"
           />
         </div>
+
+        {/* Image to Image settings */}
+        {type === 'img2img' && (
+          <div className="space-y-4 border-t border-slate-900 pt-4">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-slate-400 tracking-wider">
+                INPUT IMAGE
+              </label>
+              {inputImagePath ? (
+                <div className="relative rounded-xl border border-slate-800 bg-slate-900 p-2 flex items-center justify-between">
+                  <div className="flex items-center space-x-2 truncate max-w-[180px]">
+                    <FileImage className="h-4 w-4 text-violet-400 flex-shrink-0" />
+                    <span className="text-[10px] text-slate-200 truncate font-semibold">
+                      {inputImagePath.split(/[\\/]/).pop()}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setParams({ inputImagePath: null })}
+                    className="p-1 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
+                  >
+                    <XCircle className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const img = await window.api.selectImage()
+                    if (img) setParams({ inputImagePath: img })
+                  }}
+                  className="w-full py-2.5 px-3 border border-dashed border-slate-800 rounded-xl hover:border-slate-700 bg-slate-900/30 flex items-center justify-center space-x-2 hover:bg-slate-900/50 transition cursor-pointer text-slate-400 hover:text-slate-200"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  <span className="text-xs font-semibold">Select Input Image</span>
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs font-semibold text-slate-400">
+                <span>DENOISING STRENGTH</span>
+                <span className="text-violet-400">{denoiseStrength.toFixed(2)}</span>
+              </div>
+              <input
+                type="range"
+                min="0.05"
+                max="1.0"
+                step="0.05"
+                value={denoiseStrength}
+                disabled={generating}
+                onChange={(e) => setParams({ denoiseStrength: parseFloat(e.target.value) })}
+                className="w-full accent-violet-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Inpaint settings */}
+        {type === 'inpaint' && (
+          <div className="space-y-4 border-t border-slate-900 pt-4">
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs font-semibold text-slate-400">
+                <span>DENOISING STRENGTH</span>
+                <span className="text-violet-400">{denoiseStrength.toFixed(2)}</span>
+              </div>
+              <input
+                type="range"
+                min="0.05"
+                max="1.0"
+                step="0.05"
+                value={denoiseStrength}
+                disabled={generating}
+                onChange={(e) => setParams({ denoiseStrength: parseFloat(e.target.value) })}
+                className="w-full accent-violet-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ─── Center Prompt & Preview Panel ─── */}
@@ -379,6 +533,15 @@ export function GenerateView(): React.JSX.Element {
                 <span>Cancel Generation</span>
               </button>
             </div>
+          ) : type === 'inpaint' && activeWorkspaceTab === 'editor' ? (
+            <CanvasMaskEditor
+              width={width}
+              height={height}
+              onMaskChange={(inputImg, maskBase64) => {
+                setParams({ inputImagePath: inputImg })
+                setTempMaskBase64(maskBase64)
+              }}
+            />
           ) : outputImage ? (
             <div className="flex flex-col items-center justify-center space-y-3">
               <img
@@ -386,7 +549,18 @@ export function GenerateView(): React.JSX.Element {
                 alt="Generated Output"
                 className="max-h-[380px] max-w-full rounded-xl object-contain border border-slate-850 shadow-2xl"
               />
-              <span className="text-[11px] font-medium text-slate-500">Seed used: {seed}</span>
+              <div className="flex items-center space-x-2 text-xs">
+                <span className="text-[11px] font-medium text-slate-500">Seed used: {seed}</span>
+                {type === 'inpaint' && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveWorkspaceTab('editor')}
+                    className="ml-4 px-2.5 py-1 rounded bg-slate-900 border border-slate-800 hover:bg-slate-800 hover:text-slate-200 text-[10px] font-bold text-violet-400 uppercase tracking-wider transition cursor-pointer"
+                  >
+                    Draw Mask
+                  </button>
+                )}
+              </div>
             </div>
           ) : (
             <div className="text-center space-y-3">

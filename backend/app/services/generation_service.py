@@ -155,15 +155,20 @@ class GenerationService:
 
             # ─── Process successful outputs ───
             image_records: list[ImageRecord] = []
+            outputs_dir = Path(self._settings.paths.outputs_dir).resolve()
             for path in image_paths:
                 file_path = Path(path)
                 thumbnail_path = self._storage.get_thumbnail_path(path)
 
+                # Store relative paths to outputs_dir for the frontend static files mapping
+                rel_path = str(file_path.resolve().relative_to(outputs_dir))
+                rel_thumb_path = str(Path(thumbnail_path).resolve().relative_to(outputs_dir))
+
                 record = ImageRecord(
                     id=file_path.stem,
                     generation_id=generation_id,
-                    path=path,
-                    thumbnail_path=thumbnail_path,
+                    path=rel_path,
+                    thumbnail_path=rel_thumb_path,
                     width=entity.params.width,
                     height=entity.params.height,
                     format=file_path.suffix.replace(".", "").upper(),
@@ -211,6 +216,31 @@ class GenerationService:
 
             # Complete queue item
             await self._queue_manager.complete(queue_item_id)
+
+            # Emit completed event with image records and queue_item_id
+            await self._event_bus.publish(
+                "generation.completed",
+                {
+                    "generation_id": generation_id,
+                    "queue_item_id": queue_item_id,
+                    "completed_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "duration_ms": duration_ms,
+                    "images": [
+                        {
+                            "id": img.id,
+                            "generation_id": img.generation_id,
+                            "path": img.path,
+                            "thumbnail_path": img.thumbnail_path,
+                            "width": img.width,
+                            "height": img.height,
+                            "format": img.format,
+                            "size_bytes": img.size_bytes,
+                            "created_at": img.created_at.strftime("%Y-%m-%dT%H:%M:%SZ") if img.created_at else None,
+                        }
+                        for img in image_records
+                    ],
+                },
+            )
 
         except Exception as e:
             logger.error("Generation execution failed: %s", str(e))

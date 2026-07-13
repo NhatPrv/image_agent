@@ -6,6 +6,8 @@ declare global {
     api: {
       selectDirectory: () => Promise<string | null>
       getBackendStatus: () => Promise<{ running: boolean; pid?: number; error?: string }>
+      selectImage: () => Promise<string | null>
+      saveTempImage: (base64Data: string, filename: string) => Promise<string>
     }
   }
 }
