@@ -111,9 +111,7 @@ class SQLAlchemyGenerationRepository(BaseRepository[GenerationModel], IGeneratio
         )
         return [self._to_entity(row) for row in result.scalars().all()]
 
-    async def get_history(
-        self, limit: int = 50, offset: int = 0
-    ) -> list[GenerationEntity]:
+    async def get_history(self, limit: int = 50, offset: int = 0) -> list[GenerationEntity]:
         """Fetch generation history with pagination support (limit + offset)."""
         result = await self._session.execute(
             select(GenerationModel)

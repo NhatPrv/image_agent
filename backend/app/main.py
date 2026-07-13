@@ -60,10 +60,10 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     # 3. On first startup, scan models and auto-load the first available model.
     # This uses a short-lived DB session context to register scanned models
     # and then instruct the engine to load the first model discovered.
-    from app.di.container import get_services_context
+    from app.core.entities.generation import GenerationParams
     from app.core.enums.scheduler_type import SchedulerType
     from app.core.enums.status import QueuePriority
-    from app.core.entities.generation import GenerationParams
+    from app.di.container import get_services_context
 
     try:
         async with get_services_context() as (gen_service, model_service):
@@ -90,7 +90,9 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
                         model_id=first.id,
                     )
                     await gen_service.create_generation(params, QueuePriority.NORMAL)
-                    logger.info("Startup test generation enqueued (generation will run in background).")
+                    logger.info(
+                        "Startup test generation enqueued (generation will run in background)."
+                    )
                 except Exception as e:
                     logger.warning("Failed to enqueue startup test generation: %s", str(e))
     except Exception as e:

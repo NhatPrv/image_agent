@@ -7,8 +7,10 @@ of image generation tasks.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -16,9 +18,6 @@ from app.core.entities.generation import GenerationEntity
 from app.core.entities.image_record import ImageRecord
 from app.core.enums.status import GenerationStatus
 from app.core.exceptions.base import GenerationError, GenerationNotFoundError
-import json
-from datetime import datetime
-from pathlib import Path
 
 if TYPE_CHECKING:
     from app.config.settings import Settings
@@ -156,6 +155,12 @@ class GenerationService:
             # ─── Process successful outputs ───
             image_records: list[ImageRecord] = []
             outputs_dir = Path(self._settings.paths.outputs_dir).resolve()
+
+            # Retrieve the seed used during this generation from params.extra
+            seed_used = entity.params.extra.get("seed_used", entity.params.seed)
+            if seed_used is None or seed_used < 0:
+                seed_used = 0
+
             for path in image_paths:
                 file_path = Path(path)
                 thumbnail_path = self._storage.get_thumbnail_path(path)
@@ -167,10 +172,12 @@ class GenerationService:
                 record = ImageRecord(
                     id=file_path.stem,
                     generation_id=generation_id,
+                    filename=file_path.name,
                     path=rel_path,
                     thumbnail_path=rel_thumb_path,
                     width=entity.params.width,
                     height=entity.params.height,
+                    seed_used=seed_used,
                     format=file_path.suffix.replace(".", "").upper(),
                     size_bytes=file_path.stat().st_size if file_path.exists() else 0,
                 )
@@ -183,6 +190,7 @@ class GenerationService:
                 entity.created_at
             )  # placeholder datetime, updated by update method
             entity.duration_ms = duration_ms
+            entity.seed_used = seed_used
             await self._generation_repo.update(entity)
 
             # Persist generation metadata alongside outputs for easier auditing.
@@ -235,7 +243,9 @@ class GenerationService:
                             "height": img.height,
                             "format": img.format,
                             "size_bytes": img.size_bytes,
-                            "created_at": img.created_at.strftime("%Y-%m-%dT%H:%M:%SZ") if img.created_at else None,
+                            "created_at": img.created_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+                            if img.created_at
+                            else None,
                         }
                         for img in image_records
                     ],

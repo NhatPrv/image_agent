@@ -48,7 +48,9 @@ class InpaintPipeline(BaseDiffusionPipeline):
 
         device = "cuda" if is_cuda else "cpu"
 
-        logger.info("Loading model checkpoint for Inpainting: %s on device: %s", model_path, device)
+        logger.info(
+            "Loading model checkpoint for Inpainting: %s on device: %s", model_path, device
+        )
         try:
             loop = asyncio.get_running_loop()
 
@@ -104,17 +106,14 @@ class InpaintPipeline(BaseDiffusionPipeline):
         try:
 
             def _load_images():
-                with PILImage.open(params.input_image_path) as init_img, PILImage.open(
-                    params.mask_image_path
-                ) as mask_img:
+                with (
+                    PILImage.open(params.input_image_path) as init_img,
+                    PILImage.open(params.mask_image_path) as mask_img,
+                ):
                     # Convert input image to RGB and resize
-                    init_processed = init_img.convert("RGB").resize(
-                        (params.width, params.height)
-                    )
+                    init_processed = init_img.convert("RGB").resize((params.width, params.height))
                     # Convert mask image to grayscale and resize
-                    mask_processed = mask_img.convert("L").resize(
-                        (params.width, params.height)
-                    )
+                    mask_processed = mask_img.convert("L").resize((params.width, params.height))
                     return init_processed, mask_processed
 
             input_image, mask_image = await loop.run_in_executor(None, _load_images)
@@ -131,11 +130,13 @@ class InpaintPipeline(BaseDiffusionPipeline):
         # ─── 3. Seed configuration ───
         generator = None
         if params.seed >= 0:
+            seed_used = params.seed
             generator = torch.Generator(device=self.pipeline.device).manual_seed(params.seed)
         else:
-            random_seed = int(time.time() * 1000) % (2**32 - 1)
-            generator = torch.Generator(device=self.pipeline.device).manual_seed(random_seed)
-            logger.info("Inpainting seed set dynamically to: %d", random_seed)
+            seed_used = int(time.time() * 1000) % (2**32 - 1)
+            generator = torch.Generator(device=self.pipeline.device).manual_seed(seed_used)
+            logger.info("Inpainting seed set dynamically to: %d", seed_used)
+        params.extra["seed_used"] = seed_used
 
         # ─── 4. Progress Tracking Callback ───
         total_steps = params.steps

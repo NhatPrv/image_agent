@@ -187,7 +187,10 @@ class DownloadService:
                     headers["Range"] = f"bytes={resume_from}-"
                     logger.info(
                         "Resuming download from byte %d (attempt %d/%d): %s",
-                        resume_from, attempt, MAX_RETRIES, task.filename,
+                        resume_from,
+                        attempt,
+                        MAX_RETRIES,
+                        task.filename,
                     )
 
                 # sock_read=120: timeout if NO bytes received for 120s (stalled)
@@ -206,9 +209,7 @@ class DownloadService:
 
                         # Update total only on first response (or 200 retry)
                         if task.bytes_total == 0 or response.status == 200:
-                            task.bytes_total = int(
-                                response.headers.get("content-length", 0)
-                            )
+                            task.bytes_total = int(response.headers.get("content-length", 0))
                             if response.status == 206:
                                 # For Range responses, Content-Length is the remaining bytes
                                 # Reconstruct total from Content-Range header if available
@@ -234,9 +235,7 @@ class DownloadService:
                                 current_time = time.time()
                                 elapsed = current_time - task.start_time
                                 if elapsed > 0:
-                                    task.speed_mb = task.bytes_downloaded / (
-                                        1024 * 1024 * elapsed
-                                    )
+                                    task.speed_mb = task.bytes_downloaded / (1024 * 1024 * elapsed)
                                     if task.bytes_total > task.bytes_downloaded:
                                         remaining = task.bytes_total - task.bytes_downloaded
                                         task.eta_seconds = remaining / (
@@ -269,10 +268,10 @@ class DownloadService:
                         break
 
                 except (
+                    TimeoutError,
                     aiohttp.ClientError,
                     aiohttp.ServerDisconnectedError,
                     aiohttp.ClientPayloadError,
-                    asyncio.TimeoutError,
                     ConnectionResetError,
                 ) as conn_err:
                     if task.status == "cancelled":
@@ -280,10 +279,14 @@ class DownloadService:
                     if attempt >= MAX_RETRIES:
                         raise
                     # Exponential backoff: 2s, 4s, 8s ... capped at 60s
-                    wait_secs = min(2 ** attempt, 60)
+                    wait_secs = min(2**attempt, 60)
                     logger.warning(
                         "Connection error on attempt %d/%d for %s: %s. Retrying in %ds...",
-                        attempt, MAX_RETRIES, task.filename, conn_err, wait_secs,
+                        attempt,
+                        MAX_RETRIES,
+                        task.filename,
+                        conn_err,
+                        wait_secs,
                     )
                     await asyncio.sleep(wait_secs)
                     continue

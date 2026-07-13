@@ -113,9 +113,7 @@ class VRAMManager:
             if self._settings.gpu.device == "cuda":
                 msg = "CUDA is not available but GPU device was explicitly configured."
                 raise CUDAError(msg)
-            logger.warning(
-                "CUDA is not available. Proceeding in CPU mode (this may be slower)."
-            )
+            logger.warning("CUDA is not available. Proceeding in CPU mode (this may be slower).")
             return
 
         used_mb, total_mb, free_mb = self.get_vram_info()

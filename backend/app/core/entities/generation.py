@@ -102,11 +102,11 @@ class GenerationEntity(BaseModel):
     # Metadata
     metadata: dict[str, Any] = Field(default_factory=dict)
 
-
     @classmethod
     def create(cls, params: GenerationParams) -> GenerationEntity:
         """Create a new generation entity from parameters."""
         import uuid
+
         return cls(
             id=uuid.uuid4().hex,
             params=params,

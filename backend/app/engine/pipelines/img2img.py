@@ -122,11 +122,13 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
         # ─── 3. Seed configuration ───
         generator = None
         if params.seed >= 0:
+            seed_used = params.seed
             generator = torch.Generator(device=self.pipeline.device).manual_seed(params.seed)
         else:
-            random_seed = int(time.time() * 1000) % (2**32 - 1)
-            generator = torch.Generator(device=self.pipeline.device).manual_seed(random_seed)
-            logger.info("Img2Img seed set dynamically to: %d", random_seed)
+            seed_used = int(time.time() * 1000) % (2**32 - 1)
+            generator = torch.Generator(device=self.pipeline.device).manual_seed(seed_used)
+            logger.info("Img2Img seed set dynamically to: %d", seed_used)
+        params.extra["seed_used"] = seed_used
 
         # ─── 4. Progress Tracking Callback ───
         total_steps = params.steps
