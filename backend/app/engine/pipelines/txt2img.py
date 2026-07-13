@@ -117,71 +117,242 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
             logger.info("Generation seed set dynamically to: %d", seed_used)
         params.extra["seed_used"] = seed_used
 
-        # ─── 3. Progress Tracking Callback ───
-        total_steps = params.steps
-        start_time = time.perf_counter()
+        # Check if high-resolution generation is requested (> 1024 on any side)
+        # to trigger the Hi-Res Fix upscaling algorithm
+        is_high_res = params.width > 1024 or params.height > 1024
 
-        def _step_callback(
-            _pipe_self,
-            step: int,
-            _timestep: int,
-            callback_kwargs: dict[str, Any],
-        ) -> dict[str, Any]:
-            """Callback triggered by diffusers after each denoising step."""
-            if progress_callback:
-                elapsed_ms = int((time.perf_counter() - start_time) * 1000.0)
-                # Simple linear remaining time estimation
-                avg_step_time = (elapsed_ms / step) if step > 0 else 0
-                est_remaining_ms = int(avg_step_time * (total_steps - step))
+        if is_high_res:
+            # Determine base resolution (target 768px for the larger side)
+            max_dim = 768
+            if params.width >= params.height:
+                base_w = max_dim
+                base_h = int(max_dim * (params.height / params.width))
+            else:
+                base_h = max_dim
+                base_w = int(max_dim * (params.width / params.height))
 
-                percent = (step / total_steps) * 100.0
+            # Round to nearest multiple of 8
+            base_w = max(128, (base_w // 8) * 8)
+            base_h = max(128, (base_h // 8) * 8)
 
-                from app.core.entities.generation import GenerationProgress as ProgressEntity
+            logger.info(
+                "Hi-Res Fix triggered. Generating base image at %dx%d, then upscaling to %dx%d.",
+                base_w,
+                base_h,
+                params.width,
+                params.height,
+            )
 
-                progress_data = ProgressEntity(
-                    generation_id=generation_id,
-                    current_step=step,
-                    total_steps=total_steps,
-                    progress_percent=percent,
-                    elapsed_ms=elapsed_ms,
-                    estimated_remaining_ms=est_remaining_ms,
-                )
-                progress_callback(progress_data)
-            return callback_kwargs
+            # Define step end callback for Pass 1 (0% to 70% progress)
+            start_time = time.perf_counter()
+            total_steps = params.steps
 
-        # ─── 4. Inference execution ───
-        logger.info(
-            "Executing Text-to-Image generation | Prompt: '%s' | Steps: %d | Size: %dx%d",
-            params.prompt,
-            params.steps,
-            params.width,
-            params.height,
-        )
+            def _step_callback_pass1(
+                _pipe_self,
+                step: int,
+                _timestep: int,
+                callback_kwargs: dict[str, Any],
+            ) -> dict[str, Any]:
+                if progress_callback:
+                    elapsed_ms = int((time.perf_counter() - start_time) * 1000.0)
+                    # Estimate remaining steps across both passes (Pass 1 + Pass 2)
+                    # Pass 2 is an img2img pass which runs (steps * denoising_strength) steps.
+                    # Denoising strength: 0.35
+                    pass2_steps = max(1, int(total_steps * 0.35))
+                    combined_total_steps = total_steps + pass2_steps
 
-        try:
-            loop = asyncio.get_running_loop()
+                    percent = (step / combined_total_steps) * 100.0
 
-            def _run_inference():
-                # We use callback_on_step_end for progress updates
-                output = self.pipeline(
-                    prompt=params.prompt,
-                    negative_prompt=params.negative_prompt,
-                    num_inference_steps=params.steps,
-                    guidance_scale=params.cfg_scale,
-                    width=params.width,
-                    height=params.height,
-                    generator=generator,
-                    num_images_per_prompt=params.batch_size,
-                    callback_on_step_end=_step_callback,
-                    callback_on_step_end_tensor_inputs=["latents"],
-                )
-                return output.images
+                    from app.core.entities.generation import (
+                        GenerationProgress as ProgressEntity,
+                    )
 
-            # Run inference in executor - capture loop reference so callback
-            # can schedule async tasks on the main event loop from any thread.
-            result = await loop.run_in_executor(None, _run_inference)
-            return result
-        except Exception as e:
-            logger.error("Error during inference execution: %s", str(e))
-            msg = f"Inference execution failed: {e}"
-            raise GenerationError(msg) from e
+                    # Calculate average step time
+                    avg_step_time = (elapsed_ms / step) if step > 0 else 0
+                    est_remaining_ms = int(avg_step_time * (combined_total_steps - step))
+
+                    progress_data = ProgressEntity(
+                        generation_id=generation_id,
+                        current_step=step,
+                        total_steps=combined_total_steps,
+                        progress_percent=percent,
+                        elapsed_ms=elapsed_ms,
+                        estimated_remaining_ms=est_remaining_ms,
+                    )
+                    progress_callback(progress_data)
+                return callback_kwargs
+
+            # Pass 1: Generate Base Image
+            try:
+                loop = asyncio.get_running_loop()
+
+                def _run_pass1():
+                    output = self.pipeline(
+                        prompt=params.prompt,
+                        negative_prompt=params.negative_prompt,
+                        num_inference_steps=params.steps,
+                        guidance_scale=params.cfg_scale,
+                        width=base_w,
+                        height=base_h,
+                        generator=generator,
+                        num_images_per_prompt=params.batch_size,
+                        callback_on_step_end=_step_callback_pass1,
+                        callback_on_step_end_tensor_inputs=["latents"],
+                    )
+                    return output.images
+
+                base_images = await loop.run_in_executor(None, _run_pass1)
+
+                # Pass 2: Upscale and run Img2Img
+                from diffusers import StableDiffusionImg2ImgPipeline
+                from PIL import Image as PILImage
+
+                # Create shared components Img2Img Pipeline
+                img2img_pipe = StableDiffusionImg2ImgPipeline(**self.pipeline.components)
+                # Temporarily point self.pipeline to img2img_pipe to apply optimizations
+                original_pipe = self.pipeline
+                self.pipeline = img2img_pipe
+                self.apply_high_res_optimizations(params.width, params.height)
+
+                # Configure Pass 2 steps end callback (70% to 100% progress)
+                pass2_steps = max(1, int(total_steps * 0.35))
+                combined_total_steps = total_steps + pass2_steps
+
+                def _step_callback_pass2(
+                    _pipe_self,
+                    step: int,
+                    _timestep: int,
+                    callback_kwargs: dict[str, Any],
+                ) -> dict[str, Any]:
+                    if progress_callback:
+                        elapsed_ms = int((time.perf_counter() - start_time) * 1000.0)
+                        current_combined_step = total_steps + step
+                        avg_step_time = (
+                            (elapsed_ms / current_combined_step)
+                            if current_combined_step > 0
+                            else 0
+                        )
+                        est_remaining_ms = int(
+                            avg_step_time * (combined_total_steps - current_combined_step)
+                        )
+                        percent = (current_combined_step / combined_total_steps) * 100.0
+
+                        from app.core.entities.generation import (
+                            GenerationProgress as ProgressEntity,
+                        )
+
+                        progress_data = ProgressEntity(
+                            generation_id=generation_id,
+                            current_step=current_combined_step,
+                            total_steps=combined_total_steps,
+                            progress_percent=percent,
+                            elapsed_ms=elapsed_ms,
+                            estimated_remaining_ms=est_remaining_ms,
+                        )
+                        progress_callback(progress_data)
+                    return callback_kwargs
+
+                final_images = []
+                for base_img in base_images:
+                    # Upscale using Lanczos interpolation
+                    upscaled_img = base_img.resize(
+                        (params.width, params.height),
+                        resample=PILImage.Resampling.LANCZOS,
+                    )
+
+                    def _run_pass2(img=upscaled_img):
+                        output = img2img_pipe(
+                            prompt=params.prompt,
+                            negative_prompt=params.negative_prompt,
+                            image=img,
+                            # Low denoising strength to add details but preserve layout
+                            strength=0.35,
+                            num_inference_steps=params.steps,
+                            guidance_scale=params.cfg_scale,
+                            generator=generator,
+                            callback_on_step_end=_step_callback_pass2,
+                            callback_on_step_end_tensor_inputs=["latents"],
+                        )
+                        return output.images[0]
+
+                    final_img = await loop.run_in_executor(None, _run_pass2)
+                    final_images.append(final_img)
+
+                # Restore original text-to-image pipeline reference
+                self.pipeline = original_pipe
+                logger.info("Hi-Res Fix generation completed successfully.")
+                return final_images
+
+            except Exception as e:
+                # Restore original pipeline reference in case of failure
+                if 'original_pipe' in locals():
+                    self.pipeline = original_pipe
+                logger.error("Error during Hi-Res Fix execution: %s", str(e))
+                msg = f"Hi-Res Fix execution failed: {e}"
+                raise GenerationError(msg) from e
+
+        else:
+            # ─── Standard Resolution Direct Generation ───
+            total_steps = params.steps
+            start_time = time.perf_counter()
+
+            def _step_callback(
+                _pipe_self,
+                step: int,
+                _timestep: int,
+                callback_kwargs: dict[str, Any],
+            ) -> dict[str, Any]:
+                """Callback triggered by diffusers after each denoising step."""
+                if progress_callback:
+                    elapsed_ms = int((time.perf_counter() - start_time) * 1000.0)
+                    avg_step_time = (elapsed_ms / step) if step > 0 else 0
+                    est_remaining_ms = int(avg_step_time * (total_steps - step))
+                    percent = (step / total_steps) * 100.0
+
+                    from app.core.entities.generation import (
+                        GenerationProgress as ProgressEntity,
+                    )
+
+                    progress_data = ProgressEntity(
+                        generation_id=generation_id,
+                        current_step=step,
+                        total_steps=total_steps,
+                        progress_percent=percent,
+                        elapsed_ms=elapsed_ms,
+                        estimated_remaining_ms=est_remaining_ms,
+                    )
+                    progress_callback(progress_data)
+                return callback_kwargs
+
+            logger.info(
+                "Executing Standard Text-to-Image generation | Prompt: '%s' | "
+                "Steps: %d | Size: %dx%d",
+                params.prompt,
+                params.steps,
+                params.width,
+                params.height,
+            )
+
+            try:
+                loop = asyncio.get_running_loop()
+
+                def _run_inference():
+                    output = self.pipeline(
+                        prompt=params.prompt,
+                        negative_prompt=params.negative_prompt,
+                        num_inference_steps=params.steps,
+                        guidance_scale=params.cfg_scale,
+                        width=params.width,
+                        height=params.height,
+                        generator=generator,
+                        num_images_per_prompt=params.batch_size,
+                        callback_on_step_end=_step_callback,
+                        callback_on_step_end_tensor_inputs=["latents"],
+                    )
+                    return output.images
+
+                return await loop.run_in_executor(None, _run_inference)
+            except Exception as e:
+                logger.error("Error during inference execution: %s", str(e))
+                msg = f"Inference execution failed: {e}"
+                raise GenerationError(msg) from e
