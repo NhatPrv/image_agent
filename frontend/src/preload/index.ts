@@ -9,7 +9,18 @@ const api = {
   getBackendStatus: () => ipcRenderer.invoke('get-backend-status'),
   selectImage: () => ipcRenderer.invoke('select-image'),
   saveTempImage: (base64Data: string, filename: string) =>
-    ipcRenderer.invoke('save-temp-image', base64Data, filename)
+    ipcRenderer.invoke('save-temp-image', base64Data, filename),
+  saveImageAs: (sourcePath: string) => ipcRenderer.invoke('save-image-as', sourcePath),
+  onBackendLog: (
+    callback: (data: { type: 'stdout' | 'stderr'; text: string }) => void
+  ): (() => void) => {
+    const listener = (_event: unknown, data: { type: 'stdout' | 'stderr'; text: string }): void =>
+      callback(data)
+    ipcRenderer.on('backend-log', listener)
+    return () => {
+      ipcRenderer.removeListener('backend-log', listener)
+    }
+  }
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

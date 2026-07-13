@@ -2,7 +2,23 @@ import React, { useState, useEffect } from 'react'
 import { useGenerationStore } from '../stores/useGenerationStore'
 import { useModelStore } from '../stores/useModelStore'
 import { useSystemStore } from '../stores/useSystemStore'
-import { Sparkles, Sliders, Image, Zap, RefreshCw, XCircle, FileImage, Upload } from 'lucide-react'
+import {
+  Sparkles,
+  Sliders,
+  Image,
+  Zap,
+  RefreshCw,
+  XCircle,
+  FileImage,
+  Upload,
+  Maximize2,
+  Download,
+  Terminal,
+  AlertTriangle,
+  ShieldAlert,
+  CheckCircle,
+  Info
+} from 'lucide-react'
 import { CanvasMaskEditor } from '../components/CanvasMaskEditor'
 
 export function GenerateView(): React.JSX.Element {
@@ -43,9 +59,52 @@ export function GenerateView(): React.JSX.Element {
   const [samplers] = useState(['Euler', 'Euler A', 'DPM++ 2M', 'DPM++ 2M Karras', 'Heun', 'UniPC'])
   const [outputImage, setOutputImage] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [isScanning, setIsScanning] = useState(false)
   const [tempMaskBase64, setTempMaskBase64] = useState<string | null>(null)
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'editor' | 'output'>('editor')
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  // Realtime Log States
+  const [serverLogs, setServerLogs] = useState<string[]>([])
+  const [warningLogs, setWarningLogs] = useState<string[]>([])
+  const [errorLogs, setErrorLogs] = useState<string[]>([])
+
+  // Subscribe to backend stdout/stderr log relays
+  useEffect(() => {
+    const unsub = window.api.onBackendLog((data) => {
+      const line = data.text.trim()
+      if (!line) return
+
+      // Classify log lines by check markers or level strings
+      const isError =
+        line.includes('| ERROR    |') ||
+        line.includes('| ERROR |') ||
+        line.toLowerCase().includes('error:') ||
+        data.type === 'stderr'
+
+      const isWarning =
+        line.includes('| WARNING  |') ||
+        line.includes('| WARNING |') ||
+        line.toLowerCase().includes('warning:')
+
+      // Filter out progress lines (e.g. "10%|#") to keep server terminal clean
+      if (line.match(/^\s*\d+%\s*\|/)) {
+        return
+      }
+
+      if (isError) {
+        setErrorLogs((prev) => [...prev.slice(-99), line])
+      } else if (isWarning) {
+        setWarningLogs((prev) => [...prev.slice(-99), line])
+      } else {
+        setServerLogs((prev) => [...prev.slice(-99), line])
+      }
+    })
+    return () => {
+      unsub()
+    }
+  }, [])
 
   // Automatically display the latest generated image when history is updated
   useEffect(() => {
@@ -107,6 +166,23 @@ export function GenerateView(): React.JSX.Element {
       })
     } catch (err) {
       console.error('Failed requesting model load:', err)
+    }
+  }
+
+  async function handleDownloadImage(): Promise<void> {
+    if (!outputImage) return
+    setErrorMsg(null)
+    setSuccessMsg(null)
+    try {
+      const relativePath = outputImage.replace('http://127.0.0.1:8000/outputs/', '')
+      const savedPath = await window.api.saveImageAs(relativePath)
+      if (savedPath) {
+        setSuccessMsg(`Image successfully saved to: ${savedPath}`)
+        setTimeout(() => setSuccessMsg(null), 5000)
+      }
+    } catch (err) {
+      console.error('Failed to export image:', err)
+      setErrorMsg(`Failed to export image: ${(err as Error).message}`)
     }
   }
 
@@ -527,152 +603,321 @@ export function GenerateView(): React.JSX.Element {
         )}
       </div>
 
-      {/* ─── Center Prompt & Preview Panel ─── */}
-      <div className="flex-1 flex flex-col p-8 overflow-hidden justify-between space-y-6">
-        {/* Prompts Input Section */}
-        <div className="space-y-4 flex-shrink-0">
-          {/* Positive Prompt */}
-          <div className="space-y-1.5">
-            <div className="flex items-center space-x-2 text-xs font-semibold text-slate-400">
-              <Sparkles className="h-3.5 w-3.5 text-violet-400" />
-              <span>POSITIVE PROMPT</span>
-            </div>
-            <textarea
-              value={prompt}
-              disabled={generating}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe your creative vision in details..."
-              className="w-full h-24 bg-slate-900 border border-slate-850 rounded-xl p-4 text-sm font-medium text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-violet-500/30 transition resize-none"
-            />
-          </div>
-
-          {/* Negative Prompt */}
-          <div className="space-y-1.5">
-            <span className="text-xs font-semibold text-slate-400 tracking-wider">
-              NEGATIVE PROMPT
-            </span>
-            <input
-              type="text"
-              value={negativePrompt}
-              disabled={generating}
-              onChange={(e) => setNegativePrompt(e.target.value)}
-              placeholder="What to exclude from the generated image..."
-              className="w-full bg-slate-900 border border-slate-850 rounded-xl px-4 py-2.5 text-xs font-medium text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-violet-500/30 transition"
-            />
-          </div>
-        </div>
-
-        {/* Center Workspace (Image Preview Box) */}
-        <div className="flex-1 border border-slate-900 rounded-2xl bg-slate-900/10 flex items-center justify-center p-6 overflow-hidden relative">
-          {generating ? (
-            <div className="flex flex-col items-center justify-center space-y-5 max-w-sm w-full">
-              {/* WS Image Preview Frame */}
-              <div className="relative h-64 w-64 rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-center overflow-hidden shadow-2xl">
-                {previewImage ? (
-                  <img
-                    src={previewImage}
-                    alt="Generation step preview"
-                    className="h-full w-full object-cover animate-pulse"
-                  />
-                ) : (
-                  <Image className="h-10 w-10 text-slate-700 animate-pulse" />
-                )}
-                {/* Overlay step indicator */}
-                <div className="absolute bottom-3 left-3 bg-slate-950/80 backdrop-blur-md px-2.5 py-1 rounded-md text-[10px] font-bold text-violet-400 border border-slate-800">
-                  Step {currentStep} / {totalSteps}
-                </div>
+      {/* ─── Right Content Panel (Wrapper for Center View & Bottom Logs) ─── */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+        {/* ─── Center Prompt & Preview Panel ─── */}
+        <div className="flex-1 flex flex-col p-8 overflow-hidden justify-between space-y-6">
+          {/* Prompts Input Section */}
+          <div className="space-y-4 flex-shrink-0">
+            {/* Positive Prompt */}
+            <div className="space-y-1.5">
+              <div className="flex items-center space-x-2 text-xs font-semibold text-slate-400">
+                <Sparkles className="h-3.5 w-3.5 text-violet-400" />
+                <span>POSITIVE PROMPT</span>
               </div>
-
-              {/* Progress bar info */}
-              <div className="w-full space-y-2">
-                <div className="flex justify-between text-xs font-bold text-slate-300">
-                  <span>Generating image...</span>
-                  <span>{progress}%</span>
-                </div>
-                <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-900">
-                  <div
-                    className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full transition-all duration-300"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Cancel Button */}
-              <button
-                onClick={handleCancelGeneration}
-                className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition"
-              >
-                <XCircle className="h-4 w-4 text-rose-500" />
-                <span>Cancel Generation</span>
-              </button>
-            </div>
-          ) : type === 'inpaint' && activeWorkspaceTab === 'editor' ? (
-            <CanvasMaskEditor
-              width={width}
-              height={height}
-              onMaskChange={(inputImg, maskBase64) => {
-                setParams({ inputImagePath: inputImg })
-                setTempMaskBase64(maskBase64)
-              }}
-            />
-          ) : outputImage ? (
-            <div className="flex flex-col items-center justify-center space-y-3">
-              <img
-                src={outputImage}
-                alt="Generated Output"
-                className="max-h-[380px] max-w-full rounded-xl object-contain border border-slate-850 shadow-2xl"
+              <textarea
+                value={prompt}
+                disabled={generating}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Describe your creative vision in details..."
+                className="w-full h-24 bg-slate-900 border border-slate-850 rounded-xl p-4 text-sm font-medium text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-violet-500/30 transition resize-none"
               />
-              <div className="flex items-center space-x-2 text-xs">
-                <span className="text-[11px] font-medium text-slate-500">Seed used: {seed}</span>
-                {type === 'inpaint' && (
+            </div>
+
+            {/* Negative Prompt */}
+            <div className="space-y-1.5">
+              <span className="text-xs font-semibold text-slate-400 tracking-wider">
+                NEGATIVE PROMPT
+              </span>
+              <input
+                type="text"
+                value={negativePrompt}
+                disabled={generating}
+                onChange={(e) => setNegativePrompt(e.target.value)}
+                placeholder="What to exclude from the generated image..."
+                className="w-full bg-slate-900 border border-slate-850 rounded-xl px-4 py-2.5 text-xs font-medium text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-violet-500/30 transition"
+              />
+            </div>
+          </div>
+
+          {/* Center Workspace (Image Preview Box) */}
+          <div className="flex-1 border border-slate-900 rounded-2xl bg-slate-900/10 flex items-center justify-center p-6 overflow-hidden relative">
+            {generating ? (
+              <div className="flex flex-col items-center justify-center space-y-5 max-w-sm w-full">
+                {/* WS Image Preview Frame */}
+                <div className="relative h-64 w-64 rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-center overflow-hidden shadow-2xl">
+                  {previewImage ? (
+                    <img
+                      src={previewImage}
+                      alt="Generation step preview"
+                      className="h-full w-full object-cover animate-pulse"
+                    />
+                  ) : (
+                    <Image className="h-10 w-10 text-slate-700 animate-pulse" />
+                  )}
+                  {/* Overlay step indicator */}
+                  <div className="absolute bottom-3 left-3 bg-slate-950/80 backdrop-blur-md px-2.5 py-1 rounded-md text-[10px] font-bold text-violet-400 border border-slate-800">
+                    Step {currentStep} / {totalSteps}
+                  </div>
+                </div>
+
+                {/* Progress bar info */}
+                <div className="w-full space-y-2">
+                  <div className="flex justify-between text-xs font-bold text-slate-300">
+                    <span>Generating image...</span>
+                    <span>{progress}%</span>
+                  </div>
+                  <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-900">
+                    <div
+                      className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full transition-all duration-300"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Cancel Button */}
+                <button
+                  onClick={handleCancelGeneration}
+                  className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition"
+                >
+                  <XCircle className="h-4 w-4 text-rose-500" />
+                  <span>Cancel Generation</span>
+                </button>
+              </div>
+            ) : type === 'inpaint' && activeWorkspaceTab === 'editor' ? (
+              <CanvasMaskEditor
+                width={width}
+                height={height}
+                onMaskChange={(inputImg, maskBase64) => {
+                  setParams({ inputImagePath: inputImg })
+                  setTempMaskBase64(maskBase64)
+                }}
+              />
+            ) : outputImage ? (
+              <div className="flex flex-col items-center justify-center space-y-3">
+                <div className="relative group rounded-xl overflow-hidden border border-slate-850 shadow-2xl">
+                  <img
+                    src={outputImage}
+                    alt="Generated Output"
+                    className="max-h-[380px] max-w-full object-contain cursor-zoom-in"
+                    onClick={() => setIsFullscreen(true)}
+                  />
+                  {/* Hover overlay button to trigger fullscreen */}
+                  <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center pointer-events-none">
+                    <button className="p-3 rounded-full bg-slate-900/80 border border-slate-850 text-white shadow-lg flex items-center justify-center">
+                      <Maximize2 className="h-5 w-5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-3 text-xs">
+                  <span className="text-[11px] font-medium text-slate-500">Seed: {seed}</span>
+
                   <button
                     type="button"
-                    onClick={() => setActiveWorkspaceTab('editor')}
-                    className="ml-4 px-2.5 py-1 rounded bg-slate-900 border border-slate-800 hover:bg-slate-800 hover:text-slate-200 text-[10px] font-bold text-violet-400 uppercase tracking-wider transition cursor-pointer"
+                    onClick={() => setIsFullscreen(true)}
+                    className="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 hover:bg-slate-800 hover:text-slate-200 text-[10px] font-bold text-violet-400 uppercase tracking-wider transition cursor-pointer flex items-center space-x-1"
                   >
-                    Draw Mask
+                    <Maximize2 className="h-3 w-3" />
+                    <span>Fullscreen</span>
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={handleDownloadImage}
+                    className="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 hover:bg-slate-800 hover:text-slate-200 text-[10px] font-bold text-emerald-400 uppercase tracking-wider transition cursor-pointer flex items-center space-x-1"
+                  >
+                    <Download className="h-3 w-3" />
+                    <span>Save Image</span>
+                  </button>
+
+                  {type === 'inpaint' && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveWorkspaceTab('editor')}
+                      className="px-2.5 py-1 rounded bg-slate-900 border border-slate-800 hover:bg-slate-800 hover:text-slate-200 text-[10px] font-bold text-violet-400 uppercase tracking-wider transition cursor-pointer"
+                    >
+                      Draw Mask
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center space-y-3">
+                <div className="mx-auto h-12 w-12 rounded-xl bg-slate-900/50 border border-slate-800 flex items-center justify-center">
+                  <Image className="h-6 w-6 text-slate-600" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-sm font-semibold text-slate-400">Workspace is empty</h4>
+                  <p className="text-xs text-slate-500 max-w-xs leading-normal">
+                    Configure parameters on the left and enter your prompt to generate your local AI
+                    image.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {errorMsg && (
+              <div className="absolute top-4 left-4 right-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-xs font-medium text-rose-400">
+                {errorMsg}
+              </div>
+            )}
+
+            {successMsg && (
+              <div className="absolute top-4 left-4 right-4 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs font-medium text-emerald-400 z-10 animate-fade-in">
+                {successMsg}
+              </div>
+            )}
+          </div>
+
+          {/* Generate Trigger Button Container */}
+          <div className="flex-shrink-0">
+            <button
+              onClick={handleGenerateSubmit}
+              disabled={generating || !connected}
+              className={`w-full py-4 rounded-xl font-bold text-sm tracking-wider flex items-center justify-center space-x-2.5 transition-all duration-300 shadow-xl ${
+                generating || !connected
+                  ? 'bg-slate-900 border border-slate-850 text-slate-500 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-500 hover:to-indigo-500 shadow-violet-500/10 hover:shadow-violet-500/20 cursor-pointer'
+              }`}
+            >
+              <Zap className={`h-4 w-4 ${generating ? 'animate-bounce' : ''}`} />
+              <span>{generating ? 'GENERATING AI IMAGE...' : 'GENERATE AI IMAGE'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* ─── Bottom Split Log Terminals ─── */}
+        <div className="border-t border-slate-900 bg-slate-950/80 p-4 space-y-3 flex-shrink-0 select-none">
+          <div className="flex items-center justify-between border-b border-slate-900 pb-2">
+            <div className="flex items-center space-x-2">
+              <Terminal className="h-4 w-4 text-violet-400" />
+              <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                SYSTEM DIAGNOSTICS & LOG PANELS
+              </h3>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-4 gap-4 h-40">
+            {/* 1. Progress Terminal */}
+            <div className="bg-slate-900/50 border border-slate-850 rounded-xl p-3 flex flex-col justify-between font-mono text-[10px] overflow-hidden">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 mb-2 text-violet-400 font-bold uppercase tracking-wider">
+                <span>🚀 CURRENT PROGRESS</span>
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${generating ? 'bg-violet-500 animate-ping' : 'bg-slate-700'}`}
+                />
+              </div>
+              {generating ? (
+                <div className="space-y-2.5 flex-1 flex flex-col justify-center">
+                  <div className="flex justify-between font-semibold text-slate-200">
+                    <span>Generating...</span>
+                    <span className="text-violet-400">{progress}%</span>
+                  </div>
+                  <div className="h-2 w-full bg-slate-950 rounded-full overflow-hidden border border-slate-850">
+                    <div
+                      className="h-full bg-gradient-to-r from-violet-500 to-indigo-500 rounded-full transition-all duration-300"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                  <div className="text-slate-400 text-right">
+                    Step {currentStep} / {totalSteps}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-slate-500 space-y-1">
+                  <Info className="h-4 w-4 opacity-50" />
+                  <span>Idle - No active generation</span>
+                </div>
+              )}
+            </div>
+
+            {/* 2. Realtime Server Logs Terminal */}
+            <div className="bg-slate-900/50 border border-slate-850 rounded-xl p-3 flex flex-col font-mono text-[10px] overflow-hidden">
+              <div className="flex items-center space-x-1.5 border-b border-slate-800 pb-1.5 mb-1.5 text-emerald-400 font-bold uppercase tracking-wider">
+                <CheckCircle className="h-3 w-3" />
+                <span>Realtime Server</span>
+              </div>
+              <div className="flex-1 overflow-y-auto space-y-1 scrollbar-thin text-slate-300 pr-1 select-text">
+                {serverLogs.length === 0 ? (
+                  <span className="text-slate-600 italic">Listening for server events...</span>
+                ) : (
+                  serverLogs.map((log, idx) => (
+                    <div key={idx} className="truncate" title={log}>
+                      {log}
+                    </div>
+                  ))
                 )}
               </div>
             </div>
-          ) : (
-            <div className="text-center space-y-3">
-              <div className="mx-auto h-12 w-12 rounded-xl bg-slate-900/50 border border-slate-800 flex items-center justify-center">
-                <Image className="h-6 w-6 text-slate-600" />
+
+            {/* 3. Warnings Terminal */}
+            <div className="bg-slate-900/50 border border-slate-850 rounded-xl p-3 flex flex-col font-mono text-[10px] overflow-hidden">
+              <div className="flex items-center space-x-1.5 border-b border-slate-800 pb-1.5 mb-1.5 text-amber-400 font-bold uppercase tracking-wider">
+                <AlertTriangle className="h-3 w-3" />
+                <span>Warnings</span>
               </div>
-              <div className="space-y-1">
-                <h4 className="text-sm font-semibold text-slate-400">Workspace is empty</h4>
-                <p className="text-xs text-slate-500 max-w-xs leading-normal">
-                  Configure parameters on the left and enter your prompt to generate your local AI
-                  image.
-                </p>
+              <div className="flex-1 overflow-y-auto space-y-1 scrollbar-thin text-amber-300/80 pr-1 select-text">
+                {warningLogs.length === 0 ? (
+                  <span className="text-slate-600 italic">No system warnings.</span>
+                ) : (
+                  warningLogs.map((log, idx) => (
+                    <div key={idx} className="break-all" title={log}>
+                      {log}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
-          )}
 
-          {errorMsg && (
-            <div className="absolute top-4 left-4 right-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-xs font-medium text-rose-400">
-              {errorMsg}
+            {/* 4. Errors Terminal */}
+            <div className="bg-slate-900/50 border border-slate-850 rounded-xl p-3 flex flex-col font-mono text-[10px] overflow-hidden">
+              <div className="flex items-center space-x-1.5 border-b border-slate-800 pb-1.5 mb-1.5 text-rose-400 font-bold uppercase tracking-wider">
+                <ShieldAlert className="h-3 w-3" />
+                <span>Diagnostics Errors</span>
+              </div>
+              <div className="flex-1 overflow-y-auto space-y-1 scrollbar-thin text-rose-300/80 pr-1 select-text">
+                {errorLogs.length === 0 ? (
+                  <span className="text-slate-600 italic">No diagnostic errors.</span>
+                ) : (
+                  errorLogs.map((log, idx) => (
+                    <div key={idx} className="break-all" title={log}>
+                      {log}
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
-          )}
-        </div>
-
-        {/* Generate Trigger Button Container */}
-        <div className="flex-shrink-0">
-          <button
-            onClick={handleGenerateSubmit}
-            disabled={generating || !connected}
-            className={`w-full py-4 rounded-xl font-bold text-sm tracking-wider flex items-center justify-center space-x-2.5 transition-all duration-300 shadow-xl ${
-              generating || !connected
-                ? 'bg-slate-900 border border-slate-850 text-slate-500 cursor-not-allowed'
-                : 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-500 hover:to-indigo-500 shadow-violet-500/10 hover:shadow-violet-500/20 cursor-pointer'
-            }`}
-          >
-            <Zap className={`h-4 w-4 ${generating ? 'animate-bounce' : ''}`} />
-            <span>{generating ? 'GENERATING AI IMAGE...' : 'GENERATE AI IMAGE'}</span>
-          </button>
+          </div>
         </div>
       </div>
+
+      {/* Fullscreen Image Preview Modal */}
+      {isFullscreen && outputImage && (
+        <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex flex-col items-center justify-center p-6 transition-all duration-300">
+          <button
+            onClick={() => setIsFullscreen(false)}
+            className="absolute top-6 right-6 p-2 rounded-full bg-slate-900/80 border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition cursor-pointer"
+            title="Close Fullscreen"
+          >
+            <XCircle className="h-6 w-6" />
+          </button>
+
+          <img
+            src={outputImage}
+            alt="Fullscreen Preview"
+            className="max-h-[85vh] max-w-full rounded-2xl object-contain border border-slate-900 shadow-2xl animate-fade-in"
+          />
+
+          <div className="mt-4 px-4 py-2 bg-slate-900/80 border border-slate-800 rounded-xl text-xs font-medium text-slate-300 flex items-center space-x-4">
+            <span>
+              <strong>Prompt:</strong> {prompt}
+            </span>
+            <span className="text-slate-600">|</span>
+            <span>
+              <strong>Seed:</strong> {seed}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -6,6 +6,7 @@ import { spawn, ChildProcess } from 'child_process'
 import * as fs from 'fs'
 
 let pythonProcess: ChildProcess | null = null
+let mainWindowRef: BrowserWindow | null = null
 
 function startPythonBackend(): void {
   // Locate paths relative to dev environment or package directory.
@@ -67,11 +68,19 @@ function startPythonBackend(): void {
   })
 
   pythonProcess.stdout?.on('data', (data) => {
-    console.log(`[Python Backend]: ${data}`)
+    const text = data.toString()
+    console.log(`[Python Backend]: ${text}`)
+    if (mainWindowRef) {
+      mainWindowRef.webContents.send('backend-log', { type: 'stdout', text })
+    }
   })
 
   pythonProcess.stderr?.on('data', (data) => {
-    console.error(`[Python Backend Error]: ${data}`)
+    const text = data.toString()
+    console.error(`[Python Backend Error]: ${text}`)
+    if (mainWindowRef) {
+      mainWindowRef.webContents.send('backend-log', { type: 'stderr', text })
+    }
   })
 
   pythonProcess.on('close', (code) => {
@@ -104,8 +113,14 @@ function createWindow(): void {
     }
   })
 
+  mainWindowRef = mainWindow
+
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+  })
+
+  mainWindow.on('closed', () => {
+    mainWindowRef = null
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -166,6 +181,40 @@ app.whenReady().then(() => {
       return filePath
     } catch (err) {
       console.error('Failed to save temporary image:', err)
+      throw err
+    }
+  })
+
+  ipcMain.handle('save-image-as', async (_event, sourcePath: string) => {
+    try {
+      const originalName = sourcePath.split(/[\\/]/).pop() || 'generated_image.png'
+      const result = await dialog.showSaveDialog({
+        defaultPath: originalName,
+        filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }]
+      })
+
+      if (result.canceled || !result.filePath) {
+        return null
+      }
+
+      let absoluteSource = sourcePath
+      if (!fs.existsSync(absoluteSource)) {
+        // Resolve under outputs folder: process.cwd() / '..' / 'outputs'
+        absoluteSource = join(process.cwd(), '..', 'outputs', sourcePath)
+        if (!fs.existsSync(absoluteSource)) {
+          // Fallback: try relative to appGetAppPath / .. / outputs
+          absoluteSource = join(app.getAppPath(), '..', 'outputs', sourcePath)
+        }
+      }
+
+      if (fs.existsSync(absoluteSource)) {
+        fs.copyFileSync(absoluteSource, result.filePath)
+        return result.filePath
+      } else {
+        throw new Error(`Source image file not found: ${absoluteSource}`)
+      }
+    } catch (err) {
+      console.error('Failed to export image:', err)
       throw err
     }
   })
