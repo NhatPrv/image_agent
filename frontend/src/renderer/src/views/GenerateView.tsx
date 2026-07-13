@@ -275,34 +275,107 @@ export function GenerateView(): React.JSX.Element {
         {/* Aspect Ratio Config */}
         <div className="space-y-3">
           <label className="text-xs font-semibold text-slate-400 tracking-wider">
-            IMAGE DIMENSIONS
+            IMAGE DIMENSIONS (MAX FHD)
           </label>
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { label: 'Square', w: 512, h: 512 },
-              { label: 'Portrait', w: 512, h: 768 },
-              { label: 'Landscape', w: 768, h: 512 }
-            ].map((preset) => {
-              const active = width === preset.w && height === preset.h
-              return (
-                <button
-                  key={preset.label}
-                  disabled={generating}
-                  onClick={() => setParams({ width: preset.w, height: preset.h })}
-                  className={`py-2 px-1 text-[11px] font-semibold border rounded-lg transition-all duration-200 ${
-                    active
-                      ? 'bg-violet-600/10 border-violet-500 text-violet-400'
-                      : 'bg-slate-900/50 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                  }`}
-                >
-                  <div className="font-bold">
-                    {preset.w}x{preset.h}
-                  </div>
-                  <div className="text-[9px] opacity-60 font-medium">{preset.label}</div>
-                </button>
-              )
-            })}
+
+          {/* Preset Dropdown */}
+          <div className="space-y-1">
+            <select
+              value={
+                [
+                  '512x512',
+                  '512x768',
+                  '768x512',
+                  '720x1280',
+                  '1080x1920',
+                  '1080x2340',
+                  '768x1024',
+                  '1024x768',
+                  '1280x720',
+                  '1600x900',
+                  '1920x1080',
+                  '1920x1200'
+                ].includes(`${width}x${height}`)
+                  ? `${width}x${height}`
+                  : 'custom'
+              }
+              onChange={(e) => {
+                const val = e.target.value
+                if (val !== 'custom') {
+                  const [w, h] = val.split('x').map(Number)
+                  setParams({ width: w, height: h })
+                }
+              }}
+              disabled={generating}
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-medium text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition cursor-pointer"
+            >
+              <option value="custom">-- Custom Resolution --</option>
+              <optgroup label="Standard SD 1.5 Presets" className="bg-slate-950 text-slate-400">
+                <option value="512x512">Square (512x512 - 1:1)</option>
+                <option value="512x768">Portrait (512x768 - 2:3)</option>
+                <option value="768x512">Landscape (768x512 - 3:2)</option>
+              </optgroup>
+              <optgroup label="Mobile Devices (Portrait)" className="bg-slate-950 text-slate-400">
+                <option value="720x1280">Mobile HD (720x1280 - 9:16)</option>
+                <option value="1080x1920">Mobile FHD (1080x1920 - 9:16)</option>
+                <option value="1080x2340">Mobile Ultra (1080x2340 - 19.5:9)</option>
+              </optgroup>
+              <optgroup label="Tablet Devices" className="bg-slate-950 text-slate-400">
+                <option value="768x1024">Tablet Portrait (768x1024 - 3:4)</option>
+                <option value="1024x768">Tablet Landscape (1024x768 - 4:3)</option>
+              </optgroup>
+              <optgroup label="Desktop Screen Presets" className="bg-slate-950 text-slate-400">
+                <option value="1280x720">Desktop HD (1280x720 - 16:9)</option>
+                <option value="1600x900">Desktop HD+ (1600x900 - 16:9)</option>
+                <option value="1920x1080">Desktop FHD (1920x1080 - 16:9)</option>
+                <option value="1920x1200">Desktop Wide (1920x1200 - 16:10)</option>
+              </optgroup>
+            </select>
           </div>
+
+          {/* Custom Width/Height inputs side-by-side */}
+          <div className="grid grid-cols-2 gap-3.5">
+            <div className="space-y-1">
+              <span className="text-[10px] font-bold text-slate-500 uppercase">Width</span>
+              <input
+                type="number"
+                min="128"
+                max="2048"
+                step="8"
+                value={width}
+                disabled={generating}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value) || 512
+                  setParams({ width: val })
+                }}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition"
+              />
+            </div>
+            <div className="space-y-1">
+              <span className="text-[10px] font-bold text-slate-500 uppercase">Height</span>
+              <input
+                type="number"
+                min="128"
+                max="2048"
+                step="8"
+                value={height}
+                disabled={generating}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value) || 512
+                  setParams({ height: val })
+                }}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition"
+              />
+            </div>
+          </div>
+
+          {/* VRAM Warning for high resolutions */}
+          {(width > 1024 || height > 1024) && (
+            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] leading-relaxed text-amber-400 font-medium">
+              ⚠️ <strong>High Resolution Warning:</strong> Generating at FHD speeds requires more
+              VRAM. Make sure VRAM optimizations are enabled if you run into OOM errors.
+            </div>
+          )}
         </div>
 
         {/* Sampling Steps Slider */}
