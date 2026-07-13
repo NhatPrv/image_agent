@@ -351,7 +351,7 @@ export function GenerateView(): React.JSX.Element {
         {/* Aspect Ratio Config */}
         <div className="space-y-3">
           <label className="text-xs font-semibold text-slate-400 tracking-wider">
-            IMAGE DIMENSIONS (MAX FHD)
+            IMAGE DIMENSIONS (UP TO 8K)
           </label>
 
           {/* Preset Dropdown */}
@@ -370,7 +370,11 @@ export function GenerateView(): React.JSX.Element {
                   '1280x720',
                   '1600x900',
                   '1920x1080',
-                  '1920x1200'
+                  '1920x1200',
+                  '3840x2160',
+                  '2160x3840',
+                  '7680x4320',
+                  '4320x7680'
                 ].includes(`${width}x${height}`)
                   ? `${width}x${height}`
                   : 'custom'
@@ -406,6 +410,12 @@ export function GenerateView(): React.JSX.Element {
                 <option value="1920x1080">Desktop FHD (1920x1080 - 16:9)</option>
                 <option value="1920x1200">Desktop Wide (1920x1200 - 16:10)</option>
               </optgroup>
+              <optgroup label="UHD 4K / 8K Presets" className="bg-slate-950 text-slate-400">
+                <option value="3840x2160">UHD 4K Landscape (3840x2160)</option>
+                <option value="2160x3840">UHD 4K Portrait (2160x3840)</option>
+                <option value="7680x4320">UHD 8K Landscape (7680x4320)</option>
+                <option value="4320x7680">UHD 8K Portrait (4320x7680)</option>
+              </optgroup>
             </select>
           </div>
 
@@ -416,7 +426,7 @@ export function GenerateView(): React.JSX.Element {
               <input
                 type="number"
                 min="128"
-                max="2048"
+                max="8192"
                 step="8"
                 value={width}
                 disabled={generating}
@@ -432,7 +442,7 @@ export function GenerateView(): React.JSX.Element {
               <input
                 type="number"
                 min="128"
-                max="2048"
+                max="8192"
                 step="8"
                 value={height}
                 disabled={generating}
@@ -446,11 +456,19 @@ export function GenerateView(): React.JSX.Element {
           </div>
 
           {/* VRAM Warning for high resolutions */}
-          {(width > 1024 || height > 1024) && (
-            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] leading-relaxed text-amber-400 font-medium">
-              ⚠️ <strong>High Resolution Warning:</strong> Generating at FHD speeds requires more
-              VRAM. Make sure VRAM optimizations are enabled if you run into OOM errors.
+          {width > 2048 || height > 2048 ? (
+            <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-[10px] leading-relaxed text-rose-400 font-medium">
+              🚨 <strong>CRITICAL OOM RISK (4K/8K):</strong> Generating at resolutions above 2K
+              requires substantial GPU VRAM. Ensure both <strong>Model CPU Offloading</strong> and{' '}
+              <strong>VAE Tiling</strong> are enabled in Settings to prevent OOM crashes.
             </div>
+          ) : (
+            (width > 1024 || height > 1024) && (
+              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] leading-relaxed text-amber-400 font-medium">
+                ⚠️ <strong>High Resolution Warning:</strong> Generating at FHD speeds requires more
+                VRAM. Make sure VRAM optimizations are enabled if you run into OOM errors.
+              </div>
+            )
           )}
         </div>
 

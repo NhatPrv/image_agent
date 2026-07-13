@@ -77,11 +77,11 @@ class GenerationService:
         # 1. Parameter limits validation
         if (
             params.width < 128
-            or params.width > 2048
+            or params.width > 8192
             or params.height < 128
-            or params.height > 2048
+            or params.height > 8192
         ):
-            msg = "Width and height must be between 128 and 2048 pixels."
+            msg = "Width and height must be between 128 and 8192 pixels."
             raise GenerationError(msg)
 
         # 2. Map Entity
