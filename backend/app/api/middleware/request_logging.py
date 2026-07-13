@@ -51,7 +51,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             duration_ms = (time.perf_counter() - start_time) * 1000.0
             logger.error(
-                "Request failed: %s %s (duration: %.2fms) │ Error: %s",
+                "Request failed: %s %s (duration: %.2fms) | Error: %s",
                 method,
                 url,
                 duration_ms,

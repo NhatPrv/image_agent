@@ -123,7 +123,7 @@ class VRAMManager:
         current_available = max(0.0, max_usable - used_mb)
 
         logger.debug(
-            "VRAM check │ Required: %.1fMB, System Free: %.1fMB, App Available: %.1fMB",
+            "VRAM check | Required: %.1fMB, System Free: %.1fMB, App Available: %.1fMB",
             required_mb,
             free_mb,
             current_available,
