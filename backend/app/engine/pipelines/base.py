@@ -110,3 +110,45 @@ class BaseDiffusionPipeline:
                 )
             except Exception as e:
                 logger.warning("Failed to compile model: %s", str(e))
+
+    def apply_high_res_optimizations(self, width: int, height: int) -> None:
+        """Dynamically apply aggressive VRAM optimizations for high-resolution generations.
+
+        Prevents Out-Of-Memory (OOM) on high-res output by enabling slicing/tiling/offloading.
+        """
+        if self.pipeline is None:
+            return
+
+        device = self.settings.gpu.device
+        is_cuda = torch.cuda.is_available() and device != "cpu"
+        if not is_cuda:
+            return
+
+        pixel_count = width * height
+
+        # 1. High Resolution (> 1024x1024)
+        if pixel_count > 1024 * 1024:
+            logger.info(
+                "High resolution detected (%dx%d). Enabling VAE tiling and attention slicing.",
+                width,
+                height,
+            )
+            try:
+                self.pipeline.enable_vae_slicing()
+                self.pipeline.enable_vae_tiling()
+                self.pipeline.enable_attention_slicing()
+            except Exception as e:
+                logger.warning("Could not enable high-res VAE/attention slicing: %s", str(e))
+
+        # 2. Extreme Resolution (> 2048x2048, like 4K or 8K)
+        if pixel_count > 2048 * 2048:
+            logger.info(
+                "Extreme resolution detected (%dx%d). "
+                "Enabling sequential CPU offloading to prevent OOM.",
+                width,
+                height,
+            )
+            try:
+                self.pipeline.enable_sequential_cpu_offload()
+            except Exception as e:
+                logger.warning("Could not enable sequential CPU offload: %s", str(e))

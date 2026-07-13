@@ -114,6 +114,9 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
             msg = f"Failed to open input image: {e}"
             raise GenerationError(msg) from e
 
+        # ─── 1.5 Apply dynamic high-resolution VRAM optimizations ───
+        self.apply_high_res_optimizations(params.width, params.height)
+
         # ─── 2. Configure Scheduler ───
         self.pipeline.scheduler = SchedulerFactory.create(
             params.sampler, self.pipeline.scheduler.config

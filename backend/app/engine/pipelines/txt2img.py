@@ -97,6 +97,9 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
             msg = "Pipeline is not loaded. Call load() first."
             raise GenerationError(msg)
 
+        # ─── 0. Apply dynamic high-resolution VRAM optimizations ───
+        self.apply_high_res_optimizations(params.width, params.height)
+
         # ─── 1. Configure Scheduler / Sampler ───
         self.pipeline.scheduler = SchedulerFactory.create(
             params.sampler, self.pipeline.scheduler.config
