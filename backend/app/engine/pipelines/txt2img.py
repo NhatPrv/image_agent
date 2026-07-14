@@ -65,6 +65,7 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
                     safety_checker=None,
                     requires_safety_checker=False,
                     load_safety_checker=False,
+                    low_cpu_mem_usage=False,
                 )
 
             pipe = await loop.run_in_executor(None, _load_pipe)
