@@ -123,8 +123,8 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
         is_high_res = params.width > 1024 or params.height > 1024
 
         if is_high_res:
-            # Determine base resolution (target 768px for the larger side)
-            max_dim = 768
+            # Determine base resolution (target 1024px for the larger side)
+            max_dim = 1024
             if params.width >= params.height:
                 base_w = max_dim
                 base_h = int(max_dim * (params.height / params.width))
@@ -223,8 +223,9 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
                 self.apply_high_res_optimizations(params.width, params.height)
 
                 # Configure Pass 2 grid for Tiled Upscaling
-                tile_size = 512
-                overlap = 64
+                # Dynamically set tile size to avoid crash on dimensions smaller than 768
+                tile_size = min(768, params.width, params.height)
+                overlap = min(96, tile_size // 8)
 
                 def get_grid_coords(total_size: int, tile_s: int, over: int) -> list[int]:
                     if total_size <= tile_s:
@@ -242,7 +243,7 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
                 y_coords = get_grid_coords(params.height, tile_size, overlap)
                 total_tiles = len(x_coords) * len(y_coords)
 
-                strength = 0.45
+                strength = 0.55
                 pass2_inference_steps = int(total_steps / strength)
                 pass2_steps = max(1, int(pass2_inference_steps * strength))
                 total_pass2_steps = total_tiles * pass2_steps
