@@ -210,6 +210,13 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
 
                 # Create shared components Img2Img Pipeline
                 img2img_pipe = StableDiffusionImg2ImgPipeline(**self.pipeline.components)
+
+                # Disable safety checker on tiled Pass 2 to avoid
+                # false-positive black tiles and boost generation speed.
+                img2img_pipe.safety_checker = None
+                if hasattr(img2img_pipe, "requires_safety_checker"):
+                    img2img_pipe.requires_safety_checker = False
+
                 # Temporarily point self.pipeline to img2img_pipe to apply optimizations
                 original_pipe = self.pipeline
                 self.pipeline = img2img_pipe
