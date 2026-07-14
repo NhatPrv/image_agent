@@ -61,8 +61,8 @@ export function useWebSocket(): void {
 
             case 'generation.progress':
               setProgress(
-                data.progress_percentage || 0,
-                data.step || 0,
+                data.progress_percent || 0,
+                data.current_step || 0,
                 data.total_steps || 25,
                 data.preview_base64 ? `data:image/jpeg;base64,${data.preview_base64}` : null
               )
