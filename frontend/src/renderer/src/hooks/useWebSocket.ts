@@ -93,9 +93,27 @@ export function useWebSocket(): void {
               setLoadingProgress(data.progress || 0)
               break
 
-            case 'model.loaded':
-              setActiveModel(data.model_info)
+            case 'model.loaded': {
+              const allModels = useModelStore.getState().models
+              const found = allModels.find((m) => m.id === data.model_id)
+              if (found) {
+                setActiveModel(found)
+              } else {
+                setActiveModel({
+                  id: data.model_id,
+                  name: data.model_name || 'Active Model',
+                  filename: data.model_name || 'model',
+                  path: '',
+                  component_type: 'checkpoint',
+                  architecture: 'sd_1_5',
+                  file_format: 'safetensors',
+                  size_bytes: 0,
+                  hash_sha256: '',
+                  metadata: {}
+                })
+              }
               break
+            }
 
             case 'model.error':
               setLoadingError(data.error)

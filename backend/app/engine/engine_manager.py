@@ -201,6 +201,16 @@ class AIEngineManager(IAIEngine):
         # If the same model is already loaded, skip reload
         if self._active_model_info is not None and self._active_model_info.path == model.path:
             logger.info("Model '%s' is already active. Skipping reload.", model.name)
+            used_mb, _, _ = self._vram_manager.get_vram_info()
+            await self._event_bus.publish(
+                "model.loaded",
+                {
+                    "model_id": model.id,
+                    "model_name": model.name,
+                    "loaded_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "vram_usage_mb": used_mb,
+                },
+            )
             return
 
         # 1. Unload existing model
