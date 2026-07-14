@@ -181,7 +181,7 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
             )
 
             # Define step end callback for Pass 1 (0% to 70% progress)
-            start_time = time.perf_counter()
+            start_time = None
             total_steps = params.steps
 
             def _step_callback_pass1(
@@ -190,6 +190,10 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
                 _timestep: int,
                 callback_kwargs: dict[str, Any],
             ) -> dict[str, Any]:
+                nonlocal start_time
+                if start_time is None:
+                    start_time = time.perf_counter()
+
                 if progress_callback:
                     elapsed_ms = int((time.perf_counter() - start_time) * 1000.0)
                     # Estimate remaining steps across both passes (Pass 1 + Pass 2)
@@ -420,7 +424,7 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
         else:
             # ─── Standard Resolution Direct Generation ───
             total_steps = params.steps
-            start_time = time.perf_counter()
+            start_time = None
 
             def _step_callback(
                 _pipe_self,
@@ -429,6 +433,10 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
                 callback_kwargs: dict[str, Any],
             ) -> dict[str, Any]:
                 """Callback triggered by diffusers after each denoising step."""
+                nonlocal start_time
+                if start_time is None:
+                    start_time = time.perf_counter()
+
                 if progress_callback:
                     elapsed_ms = int((time.perf_counter() - start_time) * 1000.0)
                     avg_step_time = (elapsed_ms / step) if step > 0 else 0

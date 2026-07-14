@@ -135,7 +135,7 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
 
         # ─── 4. Progress Tracking Callback ───
         total_steps = params.steps
-        start_time = time.perf_counter()
+        start_time = None
 
         def _step_callback(
             _pipe_self,
@@ -143,6 +143,10 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
             _timestep: int,
             callback_kwargs: dict[str, Any],
         ) -> dict[str, Any]:
+            nonlocal start_time
+            if start_time is None:
+                start_time = time.perf_counter()
+
             if progress_callback:
                 elapsed_ms = int((time.perf_counter() - start_time) * 1000.0)
                 avg_step_time = (elapsed_ms / step) if step > 0 else 0
