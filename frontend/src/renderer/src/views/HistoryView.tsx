@@ -7,6 +7,51 @@ export function HistoryView(): React.JSX.Element {
   const setHistory = useGenerationStore((state) => state.setHistory)
   const [selectedRecord, setSelectedRecord] = useState<GenerationRecord | null>(null)
   const [loading, setLoading] = useState(false)
+  const [selectedAlbum, setSelectedAlbum] = useState<string>('all')
+
+  const albums = React.useMemo(
+    () => [
+      { id: 'all', name: 'Tất cả' },
+      { id: '4K_8K', name: 'UHD 4K/8K' },
+      { id: '2K_3K', name: 'QHD 2K/3K' },
+      { id: 'FHD', name: 'FHD Desktop' },
+      { id: 'Mobile', name: 'Điện thoại' },
+      { id: 'Tablet', name: 'Máy tính bảng' },
+      { id: 'SD_Standard', name: 'SD Tiêu chuẩn' },
+      { id: 'Other', name: 'Khác' }
+    ],
+    []
+  )
+
+  const getResolutionCategory = React.useCallback((width: number, height: number): string => {
+    const maxDim = Math.max(width, height)
+    if (maxDim >= 3840) return '4K_8K'
+    if (maxDim >= 2560) return '2K_3K'
+    if (maxDim >= 1920) return 'FHD'
+
+    const aspect = width / height
+    if (aspect < 0.75 && maxDim >= 1000) return 'Mobile'
+    if (aspect >= 0.75 && aspect <= 1.34 && maxDim >= 1024) return 'Tablet'
+    if (maxDim <= 1024) return 'SD_Standard'
+    return 'Other'
+  }, [])
+
+  const filteredHistory = React.useMemo(() => {
+    if (selectedAlbum === 'all') return history
+    return history.filter((record) => {
+      const category = getResolutionCategory(record.params.width, record.params.height)
+      return category === selectedAlbum
+    })
+  }, [history, selectedAlbum, getResolutionCategory])
+
+  const albumCounts = React.useMemo(() => {
+    const counts: Record<string, number> = { all: history.length }
+    history.forEach((record) => {
+      const cat = getResolutionCategory(record.params.width, record.params.height)
+      counts[cat] = (counts[cat] || 0) + 1
+    })
+    return counts
+  }, [history, getResolutionCategory])
 
   useEffect(() => {
     let active = true
@@ -43,9 +88,42 @@ export function HistoryView(): React.JSX.Element {
             LOCAL GALLERY HISTORY
           </h2>
           <span className="text-xs text-slate-400 font-semibold">
-            {history.length} generated images
+            {filteredHistory.length} of {history.length} generated images
           </span>
         </div>
+
+        {/* Album Selector Tabs */}
+        {history.length > 0 && (
+          <div className="flex gap-2 pb-2 overflow-x-auto scrollbar-thin border-b border-slate-900/40">
+            {albums.map((album) => {
+              const count = albumCounts[album.id] || 0
+              // Only display all and albums with non-zero count
+              if (album.id !== 'all' && count === 0) return null
+
+              const isActive = selectedAlbum === album.id
+              return (
+                <button
+                  key={album.id}
+                  onClick={() => setSelectedAlbum(album.id)}
+                  className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-300 ${
+                    isActive
+                      ? 'bg-violet-600/90 text-white shadow-md shadow-violet-600/20'
+                      : 'bg-slate-900/40 text-slate-400 hover:text-slate-200 hover:bg-slate-900/70 border border-slate-900/60'
+                  }`}
+                >
+                  <span>{album.name}</span>
+                  <span
+                    className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
+                      isActive ? 'bg-violet-500 text-white' : 'bg-slate-800 text-slate-500'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         {loading ? (
           <div className="h-64 flex items-center justify-center">
@@ -56,18 +134,17 @@ export function HistoryView(): React.JSX.Element {
               </span>
             </div>
           </div>
-        ) : history.length === 0 ? (
+        ) : filteredHistory.length === 0 ? (
           <div className="h-64 border border-dashed border-slate-800 rounded-2xl flex flex-col items-center justify-center text-center p-6">
             <ImageIcon className="h-8 w-8 text-slate-700 mb-2" />
-            <h4 className="text-sm font-semibold text-slate-400">No images found</h4>
+            <h4 className="text-sm font-semibold text-slate-400">No images in this album</h4>
             <p className="text-xs text-slate-500 max-w-xs leading-normal">
-              You haven&apos;t generated any images locally yet. Visit the Generate View to get
-              started!
+              No images match this resolution category yet. Visit the Generate View to create some!
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {history.map((record) => {
+            {filteredHistory.map((record) => {
               // Get first generated image from record
               const img = record.images[0]
               if (!img) return null
@@ -166,6 +243,19 @@ export function HistoryView(): React.JSX.Element {
                   </span>
                   <span className="font-semibold text-slate-300">
                     {selectedRecord.params.width} x {selectedRecord.params.height}
+                  </span>
+                </div>
+                <div className="space-y-1 bg-slate-900/20 p-2.5 rounded-xl border border-slate-900/40">
+                  <span className="text-[9px] font-bold text-slate-500 uppercase">Album</span>
+                  <span className="font-semibold text-slate-300 truncate block">
+                    {albums.find(
+                      (a) =>
+                        a.id ===
+                        getResolutionCategory(
+                          selectedRecord.params.width,
+                          selectedRecord.params.height
+                        )
+                    )?.name || 'Khác'}
                   </span>
                 </div>
                 <div className="space-y-1 bg-slate-900/20 p-2.5 rounded-xl border border-slate-900/40">

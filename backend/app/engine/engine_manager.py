@@ -147,6 +147,24 @@ class AIEngineManager(IAIEngine):
                 raise EngineError(msg)
 
             # ─── 2. Image Persistence & Output Processing ───
+            # Classify by screen resolution category to save in separate album directories
+            max_dim = max(params.width, params.height)
+            aspect_ratio = params.width / params.height
+            if max_dim >= 3840:
+                dir_name = "4K_8K"
+            elif max_dim >= 2560:
+                dir_name = "2K_3K"
+            elif max_dim >= 1920:
+                dir_name = "FHD"
+            elif aspect_ratio < 0.75 and max_dim >= 1000:
+                dir_name = "Mobile"
+            elif 0.75 <= aspect_ratio <= 1.34 and max_dim >= 1024:
+                dir_name = "Tablet"
+            elif max_dim <= 1024:
+                dir_name = "SD_Standard"
+            else:
+                dir_name = "Other"
+
             output_paths: list[str] = []
             for i, img in enumerate(pil_images):
                 img_path = await self._storage.save_image(
