@@ -94,10 +94,10 @@
 - [x] 🔴 Base pipeline abstract class
 - [x] 🔴 Model loader (safetensors, ckpt support)
 - [x] 🔴 Model info extraction (name, type, architecture, size)
-- [/] 🔴 Text-to-Image pipeline (SD 1.5 via Diffusers) — stability fixes applied, testing ongoing
-- [/] 🔴 Image-to-Image pipeline (SD 1.5 via Diffusers) — stability fixes applied, testing ongoing
+- [x] 🔴 Text-to-Image pipeline (SD 1.5 via Diffusers)
+- [x] 🔴 Image-to-Image pipeline (SD 1.5 via Diffusers)
 - [x] 🟡 Scheduler factory (Euler, Euler_A, DPM++, DDIM)
-- [/] 🔴 VRAM Manager (monitoring, basic strategy) — CPU fallback implemented, monitoring pending
+- [x] 🔴 VRAM Manager (monitoring, basic strategy)
 - [x] 🟡 xformers / SDP attention optimization
 - [x] 🟡 VAE slicing for large images
 - [x] 🟡 Seed management (random, reproducible)
@@ -199,7 +199,7 @@
 - [x] 🔴 Image preview area (show generated image)
 - [x] 🔴 Progress bar (step progress, percentage)
 - [x] 🟡 Parameter panel:
-  - [/] 🟡 Sampler/Scheduler select — mapping fix applied; integration testing pending
+  - [x] 🟡 Sampler/Scheduler select
   - [x] 🟡 Steps slider (1-150)
   - [x] 🟡 CFG scale slider (1-30)
   - [x] 🟡 Width/Height inputs

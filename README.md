@@ -87,9 +87,9 @@ Image Agent được xây dựng từ đầu với triết lý:
 
 | Tính năng | Mô tả | Trạng thái |
 |---|---|---|
-| Text to Image | Tạo ảnh từ prompt văn bản | 🔜 Phase 1 |
-| Image to Image | Biến đổi ảnh dựa trên prompt | 🔜 Phase 1 |
-| Negative Prompt | Loại bỏ các yếu tố không mong muốn | 🔜 Phase 1 |
+| Text to Image | Tạo ảnh từ prompt văn bản | ✅ Hoàn thành (v0.1.0) |
+| Image to Image | Biến đổi ảnh dựa trên prompt | ✅ Hoàn thành (v0.1.0) |
+| Negative Prompt | Loại bỏ các yếu tố không mong muốn | ✅ Hoàn thành (v0.1.0) |
 | Inpainting | Chỉnh sửa một phần của ảnh | 🔜 Phase 2 |
 | Outpainting | Mở rộng ảnh ra ngoài biên | 🔜 Phase 2 |
 | ControlNet | Kiểm soát bố cục, tư thế, đường nét | 🔜 Phase 2 |
@@ -103,14 +103,14 @@ Image Agent được xây dựng từ đầu với triết lý:
 |---|---|---|
 | Prompt Enhancer | AI cải thiện prompt tự động | 🔜 Phase 3 |
 | Batch Generate | Tạo nhiều ảnh cùng lúc | 🔜 Phase 2 |
-| Queue System | Hàng đợi xử lý với priority | 🔜 Phase 1 |
-| History | Lịch sử tạo ảnh đầy đủ | 🔜 Phase 1 |
+| Queue System | Hàng đợi xử lý với priority | ✅ Hoàn thành (v0.1.0) |
+| History | Lịch sử tạo ảnh đầy đủ | ✅ Hoàn thành (v0.1.0) |
 | Gallery | Bộ sưu tập ảnh với filter/search | 🔜 Phase 2 |
-| Model Manager | Quản lý models đã tải | 🔜 Phase 1 |
+| Model Manager | Quản lý models đã tải | ✅ Hoàn thành (v0.1.0) |
 | Download Manager | Tải model từ HuggingFace/CivitAI | 🔜 Phase 2 |
-| Settings | Cấu hình ứng dụng toàn diện | 🔜 Phase 1 |
-| Performance Monitor | Giám sát hiệu suất real-time | 🔜 Phase 1 |
-| VRAM Monitor | Giám sát VRAM usage | 🔜 Phase 1 |
+| Settings | Cấu hình ứng dụng toàn diện | ✅ Hoàn thành (v0.1.0) |
+| Performance Monitor | Giám sát hiệu suất real-time | ✅ Hoàn thành (v0.1.0) |
+| VRAM Monitor | Giám sát VRAM usage | ✅ Hoàn thành (v0.1.0) |
 | Workflow | Visual workflow builder | 🔜 Phase 3 |
 | Plugin System | Extension API cho developers | 🔜 Phase 3 |
 | Plugin Marketplace | Cửa hàng plugins | 🔜 Phase 4 |
@@ -642,18 +642,18 @@ image-agent/
 > Xây dựng nền tảng kiến trúc và tính năng cơ bản nhất
 
 - [x] Project documentation
-- [ ] Backend skeleton (FastAPI + Clean Architecture)
-- [ ] AI Engine core (PyTorch + Diffusers)
-- [ ] Text-to-Image basic
-- [ ] Image-to-Image basic
-- [ ] Frontend skeleton (Electron + React)
-- [ ] Basic UI (Prompt input, Parameter panel, Image preview)
-- [ ] Model Manager (load local models)
-- [ ] Queue system (basic)
-- [ ] History (basic)
-- [ ] Settings (basic)
-- [ ] VRAM Monitor (basic)
-- [ ] WebSocket progress tracking
+- [x] Backend skeleton (FastAPI + Clean Architecture)
+- [x] AI Engine core (PyTorch + Diffusers)
+- [x] Text-to-Image basic
+- [x] Image-to-Image basic
+- [x] Frontend skeleton (Electron + React)
+- [x] Basic UI (Prompt input, Parameter panel, Image preview)
+- [x] Model Manager (load local models)
+- [x] Queue system (basic)
+- [x] History (basic)
+- [x] Settings (basic)
+- [x] VRAM Monitor (basic)
+- [x] WebSocket progress tracking
 
 ### Phase 2: Core Features (8-10 tuần)
 
