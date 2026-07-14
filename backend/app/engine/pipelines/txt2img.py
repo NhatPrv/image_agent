@@ -98,6 +98,42 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
             msg = "Pipeline is not loaded. Call load() first."
             raise GenerationError(msg)
 
+        # ─── 0.2. Optimize and Enhance Prompts for Realism & Quality ───
+        prompt = params.prompt
+        negative_prompt = params.negative_prompt or ""
+
+        # Default high-quality negative prompt to filter out deformities
+        default_negatives = (
+            "bad anatomy, deformed, distorted, blurry, low quality, out of focus, "
+            "duplicate, watermark, signature, ugly, bad hands, mutated, extra limbs"
+        )
+        if not negative_prompt.strip():
+            negative_prompt = default_negatives
+        else:
+            if len(negative_prompt.split()) < 5:
+                negative_prompt = f"{negative_prompt.strip()}, {default_negatives}"
+
+        # Automatic Prompt Expansion for Quality and Sharpness
+        quality_tags = ["detailed", "high quality", "sharp", "resolution", "cinematic"]
+        has_quality = any(tag in prompt.lower() for tag in quality_tags)
+        if not has_quality:
+            prompt_lower = prompt.lower()
+            photo_keys = ["photo", "real", "cinematic", "portrait", "landscape"]
+            art_keys = ["anime", "manga", "illustration", "drawing", "paint"]
+
+            if any(k in prompt_lower for k in photo_keys):
+                prompt = (
+                    f"{prompt.strip()}, photorealistic, 8k resolution, extremely detailed, "
+                    "sharp focus, cinematic lighting"
+                )
+            elif any(k in prompt_lower for k in art_keys):
+                prompt = (
+                    f"{prompt.strip()}, masterpiece, high quality, highly detailed illustration, "
+                    "sharp lines, vibrant colors"
+                )
+            else:
+                prompt = f"{prompt.strip()}, highly detailed, high quality, sharp focus"
+
         # ─── 0. Apply dynamic high-resolution VRAM optimizations ───
         self.apply_high_res_optimizations(params.width, params.height)
 
@@ -189,8 +225,8 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
 
                 def _run_pass1():
                     output = self.pipeline(
-                        prompt=params.prompt,
-                        negative_prompt=params.negative_prompt,
+                        prompt=prompt,
+                        negative_prompt=negative_prompt,
                         num_inference_steps=params.steps,
                         guidance_scale=params.cfg_scale,
                         width=base_w,
@@ -207,6 +243,7 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
                 # Pass 2: Upscale and run Tiled Img2Img
                 from diffusers import StableDiffusionImg2ImgPipeline
                 from PIL import Image as PILImage
+                from PIL import ImageFilter
 
                 # Create shared components Img2Img Pipeline
                 img2img_pipe = StableDiffusionImg2ImgPipeline(**self.pipeline.components)
@@ -302,7 +339,13 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
                         resample=PILImage.Resampling.LANCZOS,
                     )
 
-                    def _run_tiled_upscale(img=upscaled_img):
+                    # Apply Unsharp Masking to base upscaled canvas to enhance edges
+                    # before the diffusion model injects high-frequency details.
+                    sharpened_base = upscaled_img.filter(
+                        ImageFilter.UnsharpMask(radius=2, percent=150, threshold=3)
+                    )
+
+                    def _run_tiled_upscale(img=sharpened_base):
                         # Initialize accumulator canvas
                         canvas = np.zeros((params.height, params.width, 3), dtype=np.float32)
                         weights = np.zeros((params.height, params.width, 1), dtype=np.float32)
@@ -333,8 +376,8 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
 
                                 # Denoise tile at 512x512 - 100% OOM Safe!
                                 output = img2img_pipe(
-                                    prompt=params.prompt,
-                                    negative_prompt=params.negative_prompt,
+                                    prompt=prompt,
+                                    negative_prompt=negative_prompt,
                                     image=tile_img,
                                     strength=strength,
                                     num_inference_steps=pass2_inference_steps,
