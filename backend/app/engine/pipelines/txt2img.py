@@ -242,7 +242,9 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
                 y_coords = get_grid_coords(params.height, tile_size, overlap)
                 total_tiles = len(x_coords) * len(y_coords)
 
-                pass2_steps = max(1, int(total_steps * 0.35))
+                strength = 0.45
+                pass2_inference_steps = int(total_steps / strength)
+                pass2_steps = max(1, int(pass2_inference_steps * strength))
                 total_pass2_steps = total_tiles * pass2_steps
                 combined_total_steps = total_steps + total_pass2_steps
 
@@ -333,8 +335,8 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
                                     prompt=params.prompt,
                                     negative_prompt=params.negative_prompt,
                                     image=tile_img,
-                                    strength=0.35,
-                                    num_inference_steps=params.steps,
+                                    strength=strength,
+                                    num_inference_steps=pass2_inference_steps,
                                     guidance_scale=params.cfg_scale,
                                     generator=generator,
                                     callback_on_step_end=_local_callback,
