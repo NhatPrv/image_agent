@@ -12,11 +12,12 @@ import time
 from typing import TYPE_CHECKING, Any
 
 import torch
-from diffusers import StableDiffusionImg2ImgPipeline
+from diffusers import StableDiffusionImg2ImgPipeline, StableDiffusionXLImg2ImgPipeline
 from PIL import Image as PILImage
 
 from app.core.exceptions.base import GenerationError
 from app.engine.pipelines.base import BaseDiffusionPipeline
+from app.engine.pipelines.txt2img import is_sdxl_checkpoint
 from app.engine.scheduler_factory import SchedulerFactory
 
 if TYPE_CHECKING:
@@ -48,13 +49,22 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
             dtype = torch.float32
 
         device = "cuda" if is_cuda else "cpu"
+        is_sdxl = is_sdxl_checkpoint(model_path)
 
-        logger.info("Loading model checkpoint for Image-to-Image: %s", model_path)
+        logger.info(
+            "Loading model checkpoint for Image-to-Image: %s on device: %s (SDXL: %s)",
+            model_path,
+            device,
+            is_sdxl,
+        )
         try:
             loop = asyncio.get_running_loop()
 
             def _load_pipe():
-                return StableDiffusionImg2ImgPipeline.from_single_file(
+                pipeline_class = (
+                    StableDiffusionXLImg2ImgPipeline if is_sdxl else StableDiffusionImg2ImgPipeline
+                )
+                return pipeline_class.from_single_file(
                     model_path,
                     torch_dtype=dtype,
                     safety_checker=None,
@@ -64,7 +74,14 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
                 )
 
             pipe = await loop.run_in_executor(None, _load_pipe)
-            self.pipeline = pipe.to(device)
+            self.pipeline = pipe
+            if not (
+                self.settings.gpu.cpu_offload
+                or self.settings.gpu.sequential_cpu_offload
+                or is_sdxl
+            ):
+                self.pipeline = pipe.to(device)
+
             self.apply_optimizations()
         except Exception as e:
             logger.error("Failed to load model file %s: %s", model_path, str(e))

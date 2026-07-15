@@ -12,11 +12,36 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import torch
-from diffusers import StableDiffusionPipeline
+from diffusers import StableDiffusionPipeline, StableDiffusionXLPipeline
 
 from app.core.exceptions.base import GenerationError
 from app.engine.pipelines.base import BaseDiffusionPipeline
 from app.engine.scheduler_factory import SchedulerFactory
+
+
+def is_sdxl_checkpoint(file_path: str) -> bool:
+    if not file_path.endswith(".safetensors"):
+        return False
+    try:
+        import json
+        import struct
+        from pathlib import Path
+
+        p = Path(file_path)
+        with p.open("rb") as f:
+            header_size_bytes = f.read(8)
+            if len(header_size_bytes) < 8:
+                return False
+            header_size = struct.unpack("<Q", header_size_bytes)[0]
+            header_json_bytes = f.read(header_size)
+            header = json.loads(header_json_bytes.decode("utf-8"))
+            return any(
+                "conditioner.embedders.1" in k or "model.diffusion_model.label_emb" in k
+                for k in header
+            )
+    except Exception:
+        return False
+
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -47,11 +72,13 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
             dtype = torch.float32
 
         device = "cuda" if is_cuda else "cpu"
+        is_sdxl = is_sdxl_checkpoint(model_path)
 
         logger.info(
-            "Loading model checkpoint for Text-to-Image: %s on device: %s",
+            "Loading model checkpoint for Text-to-Image: %s on device: %s (SDXL: %s)",
             model_path,
             device,
+            is_sdxl,
         )
         try:
             # Run blocking file loading in executor to prevent event loop delay
@@ -59,7 +86,8 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
 
             def _load_pipe():
                 # from_single_file handles both .safetensors and .ckpt local checkpoints
-                return StableDiffusionPipeline.from_single_file(
+                pipeline_class = StableDiffusionXLPipeline if is_sdxl else StableDiffusionPipeline
+                return pipeline_class.from_single_file(
                     model_path,
                     torch_dtype=dtype,
                     safety_checker=None,
@@ -69,7 +97,13 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
                 )
 
             pipe = await loop.run_in_executor(None, _load_pipe)
-            self.pipeline = pipe.to(device)
+            self.pipeline = pipe
+            if not (
+                self.settings.gpu.cpu_offload
+                or self.settings.gpu.sequential_cpu_offload
+                or is_sdxl
+            ):
+                self.pipeline = pipe.to(device)
 
             # Apply configurations
             self.apply_optimizations()
@@ -416,7 +450,7 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
 
             except Exception as e:
                 # Restore original pipeline reference in case of failure
-                if 'original_pipe' in locals():
+                if "original_pipe" in locals():
                     self.pipeline = original_pipe
                 logger.error("Error during Hi-Res Fix execution: %s", str(e))
                 msg = f"Hi-Res Fix execution failed: {e}"

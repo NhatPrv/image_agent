@@ -46,8 +46,12 @@ class BaseDiffusionPipeline:
             logger.info("Pipeline optimizations skipped: executing on CPU.")
             return
 
+        pipe_name = self.pipeline.__class__.__name__
+        is_sdxl_or_flux = "XL" in pipe_name or "Flux" in pipe_name or "Flow" in pipe_name
+
         # ─── 1. xformers (Requires nvidia GPU, nvml, and installed xformers package) ───
-        if self.settings.gpu.xformers:
+        # Note: Flux/Flow pipelines do not support standard xformers easily
+        if self.settings.gpu.xformers and not ("Flux" in pipe_name or "Flow" in pipe_name):
             try:
                 self.pipeline.enable_xformers_memory_efficient_attention()
                 logger.info("Optimized: xformers memory-efficient attention enabled.")
@@ -60,7 +64,7 @@ class BaseDiffusionPipeline:
                 # Fallback to standard PyTorch SDPA if available
 
         # ─── 2. Attention Slicing (Saves VRAM, slight speed penalty) ───
-        if self.settings.gpu.attention_slicing:
+        if self.settings.gpu.attention_slicing or is_sdxl_or_flux:
             try:
                 self.pipeline.enable_attention_slicing()
                 logger.info("Optimized: Attention slicing enabled.")
@@ -68,7 +72,7 @@ class BaseDiffusionPipeline:
                 logger.warning("Could not enable attention slicing: %s", str(e))
 
         # ─── 3. VAE Slicing (Saves massive VRAM during decode step) ───
-        if self.settings.gpu.vae_slicing:
+        if self.settings.gpu.vae_slicing or is_sdxl_or_flux:
             try:
                 self.pipeline.enable_vae_slicing()
                 logger.info("Optimized: VAE slicing enabled.")
@@ -76,7 +80,7 @@ class BaseDiffusionPipeline:
                 logger.warning("Could not enable VAE slicing: %s", str(e))
 
         # ─── 4. VAE Tiling (For high-resolution image decoding) ───
-        if self.settings.gpu.vae_tiling:
+        if self.settings.gpu.vae_tiling or is_sdxl_or_flux:
             try:
                 self.pipeline.enable_vae_tiling()
                 logger.info("Optimized: VAE tiling enabled.")
@@ -84,7 +88,7 @@ class BaseDiffusionPipeline:
                 logger.warning("Could not enable VAE tiling: %s", str(e))
 
         # ─── 5. Model CPU Offloading (Saves VRAM by keeping inactive modules on RAM) ───
-        if self.settings.gpu.cpu_offload:
+        if self.settings.gpu.cpu_offload or is_sdxl_or_flux:
             try:
                 self.pipeline.enable_model_cpu_offload()
                 logger.info("Optimized: Model CPU offload enabled.")

@@ -12,11 +12,12 @@ import time
 from typing import TYPE_CHECKING, Any
 
 import torch
-from diffusers import StableDiffusionInpaintPipeline
+from diffusers import StableDiffusionInpaintPipeline, StableDiffusionXLInpaintPipeline
 from PIL import Image as PILImage
 
 from app.core.exceptions.base import GenerationError
 from app.engine.pipelines.base import BaseDiffusionPipeline
+from app.engine.pipelines.txt2img import is_sdxl_checkpoint
 from app.engine.scheduler_factory import SchedulerFactory
 
 if TYPE_CHECKING:
@@ -47,15 +48,22 @@ class InpaintPipeline(BaseDiffusionPipeline):
             dtype = torch.float32
 
         device = "cuda" if is_cuda else "cpu"
+        is_sdxl = is_sdxl_checkpoint(model_path)
 
         logger.info(
-            "Loading model checkpoint for Inpainting: %s on device: %s", model_path, device
+            "Loading model checkpoint for Inpainting: %s on device: %s (SDXL: %s)",
+            model_path,
+            device,
+            is_sdxl,
         )
         try:
             loop = asyncio.get_running_loop()
 
             def _load_pipe():
-                return StableDiffusionInpaintPipeline.from_single_file(
+                pipeline_class = (
+                    StableDiffusionXLInpaintPipeline if is_sdxl else StableDiffusionInpaintPipeline
+                )
+                return pipeline_class.from_single_file(
                     model_path,
                     torch_dtype=dtype,
                     safety_checker=None,
@@ -65,7 +73,14 @@ class InpaintPipeline(BaseDiffusionPipeline):
                 )
 
             pipe = await loop.run_in_executor(None, _load_pipe)
-            self.pipeline = pipe.to(device)
+            self.pipeline = pipe
+            if not (
+                self.settings.gpu.cpu_offload
+                or self.settings.gpu.sequential_cpu_offload
+                or is_sdxl
+            ):
+                self.pipeline = pipe.to(device)
+
             self.apply_optimizations()
             logger.info("Inpainting pipeline loaded successfully.")
         except Exception as e:
