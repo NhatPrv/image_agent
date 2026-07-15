@@ -89,7 +89,7 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
                 pipeline_class = StableDiffusionXLPipeline if is_sdxl else StableDiffusionPipeline
                 kwargs = {
                     "torch_dtype": dtype,
-                    "low_cpu_mem_usage": False,
+                    "low_cpu_mem_usage": is_sdxl,
                 }
                 if not is_sdxl:
                     kwargs.update(
