@@ -55,7 +55,13 @@ class SQLAlchemyGenerationRepository(BaseRepository[GenerationModel], IGeneratio
         cnet_str = (
             json.dumps(entity.params.controlnet.model_dump()) if entity.params.controlnet else None
         )
-        extra_str = json.dumps(entity.params.extra) if entity.params.extra else None
+        extra_dict = dict(entity.params.extra) if entity.params.extra else {}
+        if entity.params.input_image_path:
+            extra_dict["input_image_path"] = entity.params.input_image_path
+        if entity.params.mask_image_path:
+            extra_dict["mask_image_path"] = entity.params.mask_image_path
+
+        extra_str = json.dumps(extra_dict) if extra_dict else None
         meta_str = json.dumps(entity.metadata) if entity.metadata else None
 
         if db_model is None:
@@ -146,6 +152,9 @@ class SQLAlchemyGenerationRepository(BaseRepository[GenerationModel], IGeneratio
             except Exception:
                 logger.warning("Failed to deserialize extra configs.")
 
+        input_image_path = extra.pop("input_image_path", None)
+        mask_image_path = extra.pop("mask_image_path", None)
+
         metadata = {}
         if db_model.metadata_json:
             try:
@@ -169,6 +178,8 @@ class SQLAlchemyGenerationRepository(BaseRepository[GenerationModel], IGeneratio
             loras=loras,
             controlnet=controlnet,
             extra=extra,
+            input_image_path=input_image_path,
+            mask_image_path=mask_image_path,
         )
 
         return GenerationEntity(
