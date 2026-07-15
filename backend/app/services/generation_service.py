@@ -68,6 +68,128 @@ class GenerationService:
         """Fetch past generations with pagination."""
         return await self._generation_repo.get_history(limit=limit, offset=offset)
 
+    async def sync_output_folder_to_db(self) -> None:
+        """Scan outputs directory recursively for JSON metadata files and import missing records into the database."""
+        logger.info("Starting synchronization of outputs directory to database...")
+        outputs_dir = Path(self._settings.paths.outputs_dir).resolve()
+        if not outputs_dir.exists():
+            logger.info("Outputs directory does not exist. Skipping synchronization.")
+            return
+
+        json_files = []
+        for path in outputs_dir.rglob("*.json"):
+            if "failed_generations" in path.parts or "thumbnails" in path.parts:
+                continue
+            json_files.append(path)
+
+        logger.info("Found %d metadata JSON files to check.", len(json_files))
+
+        synced_count = 0
+        for json_path in json_files:
+            try:
+                with open(json_path, encoding="utf-8") as f:
+                    data = json.load(f)
+
+                gen_id = data.get("generation_id")
+                if not gen_id or "params" not in data:
+                    continue
+
+                # Check if it already exists in database
+                existing = await self._generation_repo.get_by_id(gen_id)
+                if existing:
+                    continue
+
+                # It does not exist, let's recreate the GenerationEntity and ImageRecords
+                from app.core.entities.generation import GenerationParams
+
+                params_data = data["params"]
+
+                # Reconstruct GenerationParams
+                params = GenerationParams(
+                    prompt=params_data.get("prompt", ""),
+                    negative_prompt=params_data.get("negative_prompt", ""),
+                    width=params_data.get("width", 512),
+                    height=params_data.get("height", 512),
+                    steps=params_data.get("steps", 20),
+                    cfg_scale=params_data.get("cfg_scale", 7.0),
+                    seed=params_data.get("seed", -1),
+                    sampler=params_data.get("sampler", "euler_a"),
+                    model_id=params_data.get("model_id", ""),
+                    type=params_data.get("type", "txt2img"),
+                    input_image_path=params_data.get("input_image_path"),
+                    mask_image_path=params_data.get("mask_image_path"),
+                    denoise_strength=params_data.get("denoise_strength", 0.75),
+                    batch_size=params_data.get("batch_size", 1),
+                )
+
+                created_at_str = data.get("created_at")
+                completed_at_str = data.get("completed_at")
+
+                created_at = (
+                    datetime.fromisoformat(created_at_str) if created_at_str else datetime.utcnow()
+                )
+                completed_at = (
+                    datetime.fromisoformat(completed_at_str) if completed_at_str else None
+                )
+
+                entity = GenerationEntity(
+                    id=gen_id,
+                    type=params.type,
+                    params=params,
+                    status=GenerationStatus.COMPLETED,
+                    created_at=created_at,
+                    started_at=created_at,
+                    completed_at=completed_at,
+                    duration_ms=data.get("duration_ms", 0),
+                    seed_used=params.seed,
+                    error_message=None,
+                )
+
+                # Save GenerationEntity to DB
+                await self._generation_repo.save(entity)
+
+                # Reconstruct ImageRecords and save them
+                images_paths = data.get("images", [])
+
+                for img_path_str in images_paths:
+                    img_file_path = Path(img_path_str)
+
+                    # Store relative paths to outputs_dir for the frontend static files mapping
+                    try:
+                        rel_path = str(img_file_path.resolve().relative_to(outputs_dir))
+                    except ValueError:
+                        rel_path = img_file_path.name
+
+                    thumbnail_path = self._storage.get_thumbnail_path(str(img_file_path))
+                    try:
+                        rel_thumb_path = str(
+                            Path(thumbnail_path).resolve().relative_to(outputs_dir)
+                        )
+                    except ValueError:
+                        rel_thumb_path = None
+
+                    record = ImageRecord(
+                        id=img_file_path.stem,
+                        generation_id=gen_id,
+                        filename=img_file_path.name,
+                        path=rel_path,
+                        thumbnail_path=rel_thumb_path,
+                        width=params.width,
+                        height=params.height,
+                        seed_used=params.seed,
+                        format=img_file_path.suffix.replace(".", "").upper(),
+                        size_bytes=img_file_path.stat().st_size if img_file_path.exists() else 0,
+                    )
+                    await self._image_repo.save(record)
+
+                synced_count += 1
+            except Exception as e:
+                logger.warning("Failed to sync json file %s: %s", json_path, str(e))
+
+        logger.info(
+            "Synchronization completed. Successfully imported %d new records.", synced_count
+        )
+
     async def create_generation(
         self,
         params: GenerationParams,

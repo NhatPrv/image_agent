@@ -285,13 +285,18 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
                 base_images = await loop.run_in_executor(None, _run_pass1)
 
                 # Pass 2: Upscale and run Tiled Img2Img
-                from diffusers import StableDiffusionImg2ImgPipeline, StableDiffusionXLImg2ImgPipeline
+                from diffusers import (
+                    StableDiffusionImg2ImgPipeline,
+                    StableDiffusionXLImg2ImgPipeline,
+                )
                 from PIL import Image as PILImage
                 from PIL import ImageFilter
 
                 # Create shared components Img2Img Pipeline
                 is_sdxl = isinstance(self.pipeline, StableDiffusionXLPipeline)
-                pipeline_class = StableDiffusionXLImg2ImgPipeline if is_sdxl else StableDiffusionImg2ImgPipeline
+                pipeline_class = (
+                    StableDiffusionXLImg2ImgPipeline if is_sdxl else StableDiffusionImg2ImgPipeline
+                )
                 img2img_pipe = pipeline_class(**self.pipeline.components)
 
                 # Disable safety checker on tiled Pass 2 to avoid

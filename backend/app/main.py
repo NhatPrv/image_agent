@@ -67,6 +67,12 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
 
     try:
         async with get_services_context() as (gen_service, model_service):
+            # Sync outputs folder to database so existing local images appear in gallery
+            try:
+                await gen_service.sync_output_folder_to_db()
+            except Exception as e:
+                logger.warning("Failed to sync outputs folder to database: %s", str(e))
+
             models = await model_service.scan_and_register_models()
             if models:
                 first = models[0]
