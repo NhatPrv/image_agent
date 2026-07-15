@@ -64,14 +64,19 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
                 pipeline_class = (
                     StableDiffusionXLImg2ImgPipeline if is_sdxl else StableDiffusionImg2ImgPipeline
                 )
-                return pipeline_class.from_single_file(
-                    model_path,
-                    torch_dtype=dtype,
-                    safety_checker=None,
-                    requires_safety_checker=False,
-                    load_safety_checker=False,
-                    low_cpu_mem_usage=False,
-                )
+                kwargs = {
+                    "torch_dtype": dtype,
+                    "low_cpu_mem_usage": False,
+                }
+                if not is_sdxl:
+                    kwargs.update(
+                        {
+                            "safety_checker": None,
+                            "requires_safety_checker": False,
+                            "load_safety_checker": False,
+                        }
+                    )
+                return pipeline_class.from_single_file(model_path, **kwargs)
 
             pipe = await loop.run_in_executor(None, _load_pipe)
             self.pipeline = pipe

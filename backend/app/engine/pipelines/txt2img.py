@@ -87,14 +87,19 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
             def _load_pipe():
                 # from_single_file handles both .safetensors and .ckpt local checkpoints
                 pipeline_class = StableDiffusionXLPipeline if is_sdxl else StableDiffusionPipeline
-                return pipeline_class.from_single_file(
-                    model_path,
-                    torch_dtype=dtype,
-                    safety_checker=None,
-                    requires_safety_checker=False,
-                    load_safety_checker=False,
-                    low_cpu_mem_usage=False,
-                )
+                kwargs = {
+                    "torch_dtype": dtype,
+                    "low_cpu_mem_usage": False,
+                }
+                if not is_sdxl:
+                    kwargs.update(
+                        {
+                            "safety_checker": None,
+                            "requires_safety_checker": False,
+                            "load_safety_checker": False,
+                        }
+                    )
+                return pipeline_class.from_single_file(model_path, **kwargs)
 
             pipe = await loop.run_in_executor(None, _load_pipe)
             self.pipeline = pipe
