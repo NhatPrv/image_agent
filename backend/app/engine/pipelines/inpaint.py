@@ -100,7 +100,10 @@ class InpaintPipeline(BaseDiffusionPipeline):
         """
         logger.info("Initializing Inpainting pipeline reusing existing components.")
         try:
-            self.pipeline = StableDiffusionInpaintPipeline(**components)
+            if "text_encoder_2" in components:
+                self.pipeline = StableDiffusionXLInpaintPipeline(**components)
+            else:
+                self.pipeline = StableDiffusionInpaintPipeline(**components)
             self.apply_optimizations()
         except Exception as e:
             logger.error("Failed to create inpainting pipeline from components: %s", str(e))

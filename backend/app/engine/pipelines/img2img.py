@@ -100,7 +100,10 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
         """
         logger.info("Initializing Image-to-Image pipeline reusing existing components.")
         try:
-            self.pipeline = StableDiffusionImg2ImgPipeline(**components)
+            if "text_encoder_2" in components:
+                self.pipeline = StableDiffusionXLImg2ImgPipeline(**components)
+            else:
+                self.pipeline = StableDiffusionImg2ImgPipeline(**components)
             self.apply_optimizations()
         except Exception as e:
             logger.error("Failed to create pipeline from components: %s", str(e))
