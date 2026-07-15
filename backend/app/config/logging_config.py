@@ -6,6 +6,7 @@ Console uses colored output for development, file uses plain text for parsing.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import logging.handlers
 import sys
@@ -22,6 +23,14 @@ def setup_logging(log_level: str = "DEBUG", logs_dir: Path | None = None) -> Non
         log_level: Minimum log level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
         logs_dir: Directory for log files. If None, file logging is disabled.
     """
+    # Reconfigure stdout/stderr to use UTF-8 on Windows to prevent UnicodeEncodeError
+    if hasattr(sys.stdout, "reconfigure"):
+        with contextlib.suppress(Exception):
+            sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        with contextlib.suppress(Exception):
+            sys.stderr.reconfigure(encoding="utf-8")
+
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, log_level.upper(), logging.DEBUG))
 
