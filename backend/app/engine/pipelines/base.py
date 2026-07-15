@@ -96,7 +96,10 @@ class BaseDiffusionPipeline:
                 logger.warning("Could not enable model CPU offload: %s", str(e))
 
         # ─── 6. Sequential CPU Offloading (Aggressive VRAM optimization) ───
-        if self.settings.gpu.sequential_cpu_offload:
+        # Note: Do not enable sequential CPU offload for SDXL/FLUX models,
+        # as it is incompatible with low_cpu_mem_usage=True and raises
+        # 'ValueError: META device type not an accelerator.'
+        if self.settings.gpu.sequential_cpu_offload and not is_sdxl_or_flux:
             try:
                 self.pipeline.enable_sequential_cpu_offload()
                 logger.info("Optimized: Sequential CPU offload enabled.")
@@ -145,7 +148,12 @@ class BaseDiffusionPipeline:
                 logger.warning("Could not enable high-res VAE/attention slicing: %s", str(e))
 
         # 2. Extreme Resolution (> 2048x2048, like 4K or 8K)
-        if pixel_count > 2048 * 2048:
+        # Note: Do not enable sequential CPU offload for SDXL/FLUX models,
+        # as it is incompatible with low_cpu_mem_usage=True and raises
+        # 'ValueError: META device type not an accelerator.'
+        pipe_name = self.pipeline.__class__.__name__
+        is_sdxl_or_flux = "XL" in pipe_name or "Flux" in pipe_name or "Flow" in pipe_name
+        if pixel_count > 2048 * 2048 and not is_sdxl_or_flux:
             logger.info(
                 "Extreme resolution detected (%dx%d). "
                 "Enabling sequential CPU offloading to prevent OOM.",
