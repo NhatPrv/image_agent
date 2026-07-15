@@ -11,7 +11,7 @@ Pydantic DTO models for REST request and response validation.
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.enums.generation_type import GenerationType
 from app.core.enums.model_type import ModelArchitecture, ModelComponentType, ModelFileFormat
@@ -76,7 +76,7 @@ class ImageRecordResponse(BaseModel):
     id: str
     generation_id: str
     path: str
-    thumbnail_path: str
+    thumbnail_path: str | None = None
     width: int
     height: int
     format: str
@@ -97,7 +97,7 @@ class GenerationResponse(BaseModel):
     error_message: str | None
 
     # Nested schemas
-    params: dict[str, Any]
+    params: Any
     images: list[ImageRecordResponse] = []
 
     model_config = ConfigDict(from_attributes=True)

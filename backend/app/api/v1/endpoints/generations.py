@@ -65,7 +65,12 @@ async def list_history(
 ) -> list[GenerationResponse]:
     """Retrieve historical logs of all generations with offset pagination."""
     entities = await service.get_all_generations(limit=limit, offset=offset)
-    return [GenerationResponse.model_validate(e) for e in entities]
+    responses = []
+    for e in entities:
+        d = e.model_dump()
+        d["params"] = e.params.model_dump()
+        responses.append(GenerationResponse(**d))
+    return responses
 
 
 @router.get("/{generation_id}", response_model=GenerationResponse)
@@ -76,7 +81,9 @@ async def get_generation_status(
     """Retrieve metadata details and file output paths for a single generation."""
     try:
         entity = await service.get_generation(generation_id)
-        return GenerationResponse.model_validate(entity)
+        d = entity.model_dump()
+        d["params"] = entity.params.model_dump()
+        return GenerationResponse(**d)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
