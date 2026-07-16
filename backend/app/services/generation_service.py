@@ -652,7 +652,7 @@ class GenerationService:
         prompt_message = f"User input prompt to optimize:\n{prompt}"
 
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     f"{ollama_url}/api/chat",
                     json={
@@ -676,5 +676,11 @@ class GenerationService:
                 ):
                     optimized = optimized[1:-1].strip()
                 return optimized if optimized else prompt
+        except httpx.TimeoutException as e:
+            logger.warning("Ollama request timed out (60s limit reached): %s", str(e))
+            raise RuntimeError(
+                "Ollama request timed out. The local model might be loading slowly into memory. Please try again in a few seconds."
+            ) from e
         except Exception as e:
-            raise RuntimeError(f"Ollama prompt optimization request failed: {e}")
+            logger.warning("Ollama request failed: %s", str(e))
+            raise RuntimeError(f"Ollama prompt optimization request failed: {e}") from e
