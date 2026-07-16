@@ -187,7 +187,124 @@ class GenerationService:
                 logger.warning("Failed to sync json file %s: %s", json_path, str(e))
 
         logger.info(
-            "Synchronization completed. Successfully imported %d new records.", synced_count
+            "Phase 1: Synchronization completed. Successfully imported %d new records.",
+            synced_count,
+        )
+
+        # ─── Phase 2: Scan for all raw image files that are not in the database ───
+        logger.info("Starting Phase 2: Scanning raw image files...")
+        image_extensions = ("*.png", "*.jpg", "*.jpeg", "*.webp")
+        image_files = []
+        for ext in image_extensions:
+            for path in outputs_dir.rglob(ext):
+                if "failed_generations" in path.parts or "thumbnails" in path.parts:
+                    continue
+                image_files.append(path)
+
+        logger.info("Found %d image files to check in outputs folder.", len(image_files))
+
+        image_synced_count = 0
+        for img_path in image_files:
+            try:
+                # Check if this image already exists in the image repo
+                existing_img = await self._image_repo.get_by_id(img_path.stem)
+                if existing_img:
+                    continue
+
+                # Skip if JSON counterpart exists to let Phase 1 handle it or avoid duplicate attempts
+                json_counterpart = img_path.with_suffix(".json")
+                if json_counterpart.exists():
+                    continue
+
+                # Import it as a placeholder generation
+                from PIL import Image as PILImage
+
+                width, height = 512, 512
+                try:
+                    with PILImage.open(img_path) as pil_img:
+                        width, height = pil_img.size
+                except Exception:
+                    pass
+
+                mtime = img_path.stat().st_mtime
+                created_at = datetime.fromtimestamp(mtime)
+
+                # Reconstruct GenerationParams
+                from app.core.entities.generation import GenerationParams
+
+                params = GenerationParams(
+                    prompt=img_path.name,
+                    negative_prompt="",
+                    width=width,
+                    height=height,
+                    steps=20,
+                    cfg_scale=7.0,
+                    seed=-1,
+                    sampler="euler_a",
+                    model_id="",
+                    type="txt2img" if "txt2img" in img_path.parts else "img2img",
+                    batch_size=1,
+                )
+
+                gen_id = f"gen_{img_path.stem}"
+
+                # Reconstruct GenerationEntity
+                entity = GenerationEntity(
+                    id=gen_id,
+                    type=params.type,
+                    params=params,
+                    status=GenerationStatus.COMPLETED,
+                    created_at=created_at,
+                    started_at=created_at,
+                    completed_at=created_at,
+                    duration_ms=0,
+                    seed_used=-1,
+                    error_message=None,
+                )
+
+                # Save GenerationEntity to DB
+                await self._generation_repo.save(entity)
+
+                # Reconstruct relative path for image and thumbnail
+                try:
+                    rel_path = str(img_path.resolve().relative_to(outputs_dir))
+                except ValueError:
+                    rel_path = img_path.name
+
+                thumbnail_path = self._storage.get_thumbnail_path(str(img_path))
+                # Generate thumbnail if missing
+                if not Path(thumbnail_path).exists():
+                    try:
+                        await self._storage.save_thumbnail(str(img_path))
+                    except Exception:
+                        pass
+
+                try:
+                    rel_thumb_path = str(Path(thumbnail_path).resolve().relative_to(outputs_dir))
+                except ValueError:
+                    rel_thumb_path = None
+
+                record = ImageRecord(
+                    id=img_path.stem,
+                    generation_id=gen_id,
+                    filename=img_path.name,
+                    path=rel_path,
+                    thumbnail_path=rel_thumb_path,
+                    width=width,
+                    height=height,
+                    seed_used=-1,
+                    format=img_path.suffix.replace(".", "").upper(),
+                    size_bytes=img_path.stat().st_size if img_path.exists() else 0,
+                    created_at=created_at,
+                )
+                await self._image_repo.save(record)
+                image_synced_count += 1
+            except Exception as e:
+                logger.warning("Failed to sync raw image file %s: %s", img_path, str(e))
+
+        logger.info(
+            "Phase 2: Image synchronization completed. Successfully imported %d new images.",
+            image_synced_count,
         )
 
     async def create_generation(

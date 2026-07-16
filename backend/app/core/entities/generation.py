@@ -11,6 +11,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.entities.image_record import ImageRecord
 from app.core.enums.generation_type import GenerationType
 from app.core.enums.scheduler_type import SchedulerType
 from app.core.enums.status import GenerationStatus
@@ -93,7 +94,7 @@ class GenerationEntity(BaseModel):
     duration_ms: int | None = None
 
     # Output
-    output_images: list[str] = Field(default_factory=list)
+    output_images: list[ImageRecord] = Field(default_factory=list)
     seed_used: int | None = None
 
     # Error tracking
