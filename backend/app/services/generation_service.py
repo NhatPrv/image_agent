@@ -376,6 +376,8 @@ class GenerationService:
         # Update status to RUNNING in database
         entity.status = GenerationStatus.GENERATING
         await self._generation_repo.update(entity)
+        # Commit to release database write lock during GPU inference
+        await self._generation_repo._session.commit()
 
         start_time = time.perf_counter()
 
