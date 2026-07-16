@@ -82,25 +82,6 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
                 except Exception as e:
                     logger.warning("Auto-load of model failed: %s", str(e))
 
-                # Enqueue a lightweight startup generation to validate pipeline end-to-end.
-                try:
-                    params = GenerationParams(
-                        prompt="Startup test image",
-                        negative_prompt="",
-                        width=256,
-                        height=256,
-                        steps=10,
-                        cfg_scale=7.5,
-                        seed=-1,
-                        sampler=SchedulerType.EULER_A,
-                        model_id=first.id,
-                    )
-                    await gen_service.create_generation(params, QueuePriority.NORMAL)
-                    logger.info(
-                        "Startup test generation enqueued (generation will run in background)."
-                    )
-                except Exception as e:
-                    logger.warning("Failed to enqueue startup test generation: %s", str(e))
     except Exception as e:
         logger.warning("Model auto-scan/load during startup failed: %s", str(e))
 
