@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useGenerationStore } from '../stores/useGenerationStore'
 import { useModelStore } from '../stores/useModelStore'
 import { useSystemStore } from '../stores/useSystemStore'
@@ -64,6 +64,12 @@ export function GenerateView(): React.JSX.Element {
   const [tempMaskBase64, setTempMaskBase64] = useState<string | null>(null)
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'editor' | 'output'>('editor')
   const [isFullscreen, setIsFullscreen] = useState(false)
+
+  // Loop Generation States
+  const [loopEnabled, setLoopEnabled] = useState(false)
+  const [loopCount, setLoopCount] = useState<number>(5)
+  const [remainingLoops, setRemainingLoops] = useState<number>(0)
+  const isLoopRunning = useRef(false)
 
   // Realtime Log States
   const [serverLogs, setServerLogs] = useState<string[]>([])
@@ -281,7 +287,59 @@ export function GenerateView(): React.JSX.Element {
     }
   }
 
+  // Loop Generation effect watching generating status
+  useEffect(() => {
+    let cleanupFn: (() => void) | undefined = undefined
+
+    if (!generating && isLoopRunning.current) {
+      if (remainingLoops === -1 || remainingLoops > 0) {
+        let nextRemaining = remainingLoops
+        if (remainingLoops !== -1) {
+          nextRemaining = remainingLoops - 1
+          setRemainingLoops(nextRemaining)
+        }
+
+        if (nextRemaining === -1 || nextRemaining > 0) {
+          const timer = setTimeout(() => {
+            handleGenerateSubmit()
+          }, 1000)
+          cleanupFn = () => clearTimeout(timer)
+        } else {
+          isLoopRunning.current = false
+          setSuccessMsg('Loop generation completed successfully!')
+          setTimeout(() => setSuccessMsg(null), 3000)
+        }
+      }
+    }
+
+    return cleanupFn
+  }, [generating, remainingLoops])
+
+  async function handleStartGenerate(): Promise<void> {
+    if (loopEnabled) {
+      let count = loopCount
+      if (count < 1) {
+        count = -1
+      }
+      setRemainingLoops(count)
+      isLoopRunning.current = true
+      await handleGenerateSubmit()
+    } else {
+      isLoopRunning.current = false
+      setRemainingLoops(0)
+      await handleGenerateSubmit()
+    }
+  }
+
+  async function handleStopLoop(): Promise<void> {
+    isLoopRunning.current = false
+    setRemainingLoops(0)
+    await handleCancelGeneration()
+  }
+
   async function handleCancelGeneration(): Promise<void> {
+    isLoopRunning.current = false
+    setRemainingLoops(0)
     if (!currentGenId) return
     try {
       await fetch(`http://127.0.0.1:8000/api/v1/queue/${currentGenId}/cancel`, {
@@ -570,6 +628,39 @@ export function GenerateView(): React.JSX.Element {
           />
         </div>
 
+        {/* Loop Generation Settings */}
+        <div className="space-y-3 border-t border-slate-900 pt-4">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold text-slate-400 tracking-wider">
+              LOOP GENERATION
+            </label>
+            <input
+              type="checkbox"
+              checked={loopEnabled}
+              disabled={isLoopRunning.current}
+              onChange={(e) => setLoopEnabled(e.target.checked)}
+              className="accent-violet-500 h-4 w-4 rounded border-slate-800 bg-slate-900 cursor-pointer"
+            />
+          </div>
+          {loopEnabled && (
+            <div className="space-y-1.5 animate-fade-in">
+              <span className="text-[10px] font-bold text-slate-500 uppercase">
+                Number of Loops (Enter &lt; 1 for Infinite)
+              </span>
+              <input
+                type="number"
+                value={loopCount}
+                disabled={isLoopRunning.current}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value)
+                  setLoopCount(isNaN(val) ? 1 : val)
+                }}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition"
+              />
+            </div>
+          )}
+        </div>
+
         {/* Image to Image settings */}
         {type === 'img2img' && (
           <div className="space-y-4 border-t border-slate-900 pt-4">
@@ -818,18 +909,37 @@ export function GenerateView(): React.JSX.Element {
 
           {/* Generate Trigger Button Container */}
           <div className="flex-shrink-0">
-            <button
-              onClick={handleGenerateSubmit}
-              disabled={generating || !connected}
-              className={`w-full py-4 rounded-xl font-bold text-sm tracking-wider flex items-center justify-center space-x-2.5 transition-all duration-300 shadow-xl ${
-                generating || !connected
-                  ? 'bg-slate-900 border border-slate-850 text-slate-500 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-500 hover:to-indigo-500 shadow-violet-500/10 hover:shadow-violet-500/20 cursor-pointer'
-              }`}
-            >
-              <Zap className={`h-4 w-4 ${generating ? 'animate-bounce' : ''}`} />
-              <span>{generating ? 'GENERATING AI IMAGE...' : 'GENERATE AI IMAGE'}</span>
-            </button>
+            {(() => {
+              const isLoopActive = isLoopRunning.current
+              const buttonText = isLoopActive
+                ? remainingLoops === -1
+                  ? 'STOP INFINITE LOOP'
+                  : `STOP LOOP (${remainingLoops} LEFT)`
+                : generating
+                  ? 'GENERATING AI IMAGE...'
+                  : 'GENERATE AI IMAGE'
+
+              return (
+                <button
+                  onClick={isLoopActive ? handleStopLoop : handleStartGenerate}
+                  disabled={!isLoopActive && (generating || !connected)}
+                  className={`w-full py-4 rounded-xl font-bold text-sm tracking-wider flex items-center justify-center space-x-2.5 transition-all duration-300 shadow-xl ${
+                    !isLoopActive && (generating || !connected)
+                      ? 'bg-slate-900 border border-slate-850 text-slate-500 cursor-not-allowed'
+                      : isLoopActive
+                        ? 'bg-gradient-to-r from-rose-600 to-red-600 text-white hover:from-rose-500 hover:to-red-500 shadow-rose-500/10 hover:shadow-rose-500/20 cursor-pointer'
+                        : 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-500 hover:to-indigo-500 shadow-violet-500/10 hover:shadow-violet-500/20 cursor-pointer'
+                  }`}
+                >
+                  {isLoopActive ? (
+                    <XCircle className="h-4 w-4 animate-pulse" />
+                  ) : (
+                    <Zap className={`h-4 w-4 ${generating ? 'animate-bounce' : ''}`} />
+                  )}
+                  <span>{buttonText}</span>
+                </button>
+              )
+            })()}
           </div>
         </div>
 
