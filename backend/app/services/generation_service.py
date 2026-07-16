@@ -531,3 +531,47 @@ class GenerationService:
     async def update_generation(self, generation: GenerationEntity) -> None:
         """Update a generation record."""
         await self._generation_repo.update(generation)
+
+    async def delete_generation(self, generation_id: str) -> None:
+        """Delete a generation, its associated images, and all files from disk."""
+        entity = await self._generation_repo.get_by_id(generation_id)
+        if not entity:
+            msg = f"Generation record '{generation_id}' not found."
+            raise GenerationNotFoundError(msg, generation_id=generation_id)
+
+        # 1. Delete image files and thumbnails from disk
+        for img in entity.output_images:
+            try:
+                # delete_image expects a relative path or absolute path
+                await self._storage.delete_image(img.path)
+            except Exception as e:
+                logger.warning("Failed to delete image file %s: %s", img.path, str(e))
+
+        # 2. Delete metadata JSON files from disk
+        outputs_dir = Path(self._settings.paths.outputs_dir).resolve()
+        for img in entity.output_images:
+            if img.path:
+                abs_img_path = outputs_dir / img.path
+                json_path = abs_img_path.parent / f"{generation_id}.json"
+                if json_path.exists():
+                    try:
+                        json_path.unlink()
+                        logger.info("Deleted metadata JSON file: %s", json_path)
+                    except Exception as e:
+                        logger.warning("Failed to delete JSON file %s: %s", json_path, str(e))
+
+        # Also search for a failed generation JSON file
+        failed_json_path = outputs_dir / "failed_generations" / f"{generation_id}.json"
+        if failed_json_path.exists():
+            try:
+                failed_json_path.unlink()
+                logger.info("Deleted failed generation JSON file: %s", failed_json_path)
+            except Exception as e:
+                logger.warning(
+                    "Failed to delete failed JSON file %s: %s", failed_json_path, str(e)
+                )
+
+        # 3. Delete database records
+        # SQLAlchemy cascade="all, delete-orphan" handles the ImageModels
+        await self._generation_repo.delete(generation_id)
+        logger.info("Successfully deleted generation record: %s", generation_id)

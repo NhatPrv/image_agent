@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import { useGenerationStore, GenerationRecord } from '../stores/useGenerationStore'
-import { Image as ImageIcon, Calendar, Clock, Compass, Layers } from 'lucide-react'
+import { Image as ImageIcon, Calendar, Clock, Compass, Layers, Trash2 } from 'lucide-react'
 
 export function HistoryView(): React.JSX.Element {
   const history = useGenerationStore((state) => state.history)
   const setHistory = useGenerationStore((state) => state.setHistory)
+  const removeHistoryItem = useGenerationStore((state) => state.removeHistoryItem)
   const [selectedRecord, setSelectedRecord] = useState<GenerationRecord | null>(null)
   const [loading, setLoading] = useState(false)
   const [selectedAlbum, setSelectedAlbum] = useState<string>('all')
@@ -78,6 +79,29 @@ export function HistoryView(): React.JSX.Element {
       active = false
     }
   }, [setHistory])
+
+  async function handleDeleteRecord(): Promise<void> {
+    if (!selectedRecord) return
+    const confirmed = window.confirm(
+      'Bạn có chắc chắn muốn xóa bản ghi sinh ảnh này cùng tất cả tệp ảnh, ảnh nhỏ và file cấu hình JSON trên đĩa không?'
+    )
+    if (!confirmed) return
+
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/api/v1/generations/${selectedRecord.id}`, {
+        method: 'DELETE'
+      })
+      if (response.ok) {
+        removeHistoryItem(selectedRecord.id)
+        setSelectedRecord(null)
+      } else {
+        alert('Không thể xóa bản ghi. Vui lòng kiểm tra lại backend.')
+      }
+    } catch (err) {
+      console.error('Failed to delete generation record:', err)
+      alert(`Lỗi kết nối khi xóa: ${(err as Error).message}`)
+    }
+  }
 
   return (
     <div className="h-full w-full flex overflow-hidden">
@@ -294,6 +318,14 @@ export function HistoryView(): React.JSX.Element {
                 </div>
               </div>
             </div>
+            {/* Delete button */}
+            <button
+              onClick={handleDeleteRecord}
+              className="w-full py-2.5 rounded-xl bg-rose-950/20 border border-rose-900/40 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 font-bold text-xs uppercase tracking-wider transition cursor-pointer flex items-center justify-center space-x-2 mt-4"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>Xóa Ảnh & JSON</span>
+            </button>
           </div>
 
           <div className="pt-4 border-t border-slate-900 flex items-center justify-between text-[10px] text-slate-500">

@@ -72,6 +72,8 @@ export function GenerateView(): React.JSX.Element {
   const setLoopCount = useGenerationStore((state) => state.setLoopCount)
   const [remainingLoops, setRemainingLoops] = useState<number>(0)
   const isLoopRunning = useRef(false)
+  const prevGenerating = useRef(false)
+  const remainingLoopsRef = useRef(0)
 
   // Realtime Log States
   const [serverLogs, setServerLogs] = useState<string[]>([])
@@ -291,13 +293,18 @@ export function GenerateView(): React.JSX.Element {
 
   // Loop Generation effect watching generating status
   useEffect(() => {
+    const wentFromTrueToFalse = prevGenerating.current === true && generating === false
+    prevGenerating.current = generating
+
     let cleanupFn: (() => void) | undefined = undefined
 
-    if (!generating && isLoopRunning.current) {
-      if (remainingLoops === -1 || remainingLoops > 0) {
-        let nextRemaining = remainingLoops
-        if (remainingLoops !== -1) {
-          nextRemaining = remainingLoops - 1
+    if (wentFromTrueToFalse && isLoopRunning.current) {
+      const currentRemaining = remainingLoopsRef.current
+      if (currentRemaining === -1 || currentRemaining > 0) {
+        let nextRemaining = currentRemaining
+        if (currentRemaining !== -1) {
+          nextRemaining = currentRemaining - 1
+          remainingLoopsRef.current = nextRemaining
           setRemainingLoops(nextRemaining)
         }
 
@@ -315,7 +322,7 @@ export function GenerateView(): React.JSX.Element {
     }
 
     return cleanupFn
-  }, [generating, remainingLoops])
+  }, [generating])
 
   async function handleStartGenerate(): Promise<void> {
     if (loopEnabled) {
@@ -323,11 +330,13 @@ export function GenerateView(): React.JSX.Element {
       if (count < 1) {
         count = -1
       }
+      remainingLoopsRef.current = count
       setRemainingLoops(count)
       isLoopRunning.current = true
       await handleGenerateSubmit()
     } else {
       isLoopRunning.current = false
+      remainingLoopsRef.current = 0
       setRemainingLoops(0)
       await handleGenerateSubmit()
     }
@@ -335,12 +344,14 @@ export function GenerateView(): React.JSX.Element {
 
   async function handleStopLoop(): Promise<void> {
     isLoopRunning.current = false
+    remainingLoopsRef.current = 0
     setRemainingLoops(0)
     await handleCancelGeneration()
   }
 
   async function handleCancelGeneration(): Promise<void> {
     isLoopRunning.current = false
+    remainingLoopsRef.current = 0
     setRemainingLoops(0)
     if (!currentGenId) return
     try {

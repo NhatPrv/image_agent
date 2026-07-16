@@ -17,6 +17,7 @@ from app.di.container import (
     get_settings_dep,
     get_system_service,
     get_download_service,
+    get_generation_service,
 )
 from app.main import app
 
@@ -229,5 +230,20 @@ def test_cancel_download_endpoint(client: TestClient):
         data = response.json()
         assert data["status"] == "cancelled"
         assert data["task_id"] == "download_task_123"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_delete_generation_endpoint(client: TestClient):
+    """Verify DELETE endpoint calls delete_generation on GenerationService."""
+    mock_service = MagicMock()
+    mock_service.delete_generation = AsyncMock()
+
+    app.dependency_overrides[get_generation_service] = lambda: mock_service
+
+    try:
+        response = client.delete("/api/v1/generations/generation_123")
+        assert response.status_code == 204
+        mock_service.delete_generation.assert_called_once_with("generation_123")
     finally:
         app.dependency_overrides.clear()

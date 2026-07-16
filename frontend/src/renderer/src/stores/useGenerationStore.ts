@@ -89,6 +89,7 @@ interface GenerationState {
   setHistory: (history: GenerationRecord[]) => void
   addHistoryItem: (item: GenerationRecord) => void
   updateHistoryItem: (id: string, updates: Partial<GenerationRecord>) => void
+  removeHistoryItem: (id: string) => void
   resetProgress: () => void
   setLoopEnabled: (enabled: boolean) => void
   setLoopCount: (count: number) => void
@@ -134,6 +135,10 @@ export const useGenerationStore = create<GenerationState>((set) => ({
   updateHistoryItem: (id, updates) =>
     set((state) => ({
       history: state.history.map((item) => (item.id === id ? { ...item, ...updates } : item))
+    })),
+  removeHistoryItem: (id) =>
+    set((state) => ({
+      history: state.history.filter((item) => item.id !== id)
     })),
   resetProgress: () =>
     set({

@@ -92,3 +92,18 @@ async def get_generation_status(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Record not found: {e}",
         ) from e
+
+
+@router.delete("/{generation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_generation_record(
+    generation_id: str,
+    service: "GenerationService" = Depends(get_generation_service),
+) -> None:
+    """Delete a generation log, its output images, and disk files."""
+    try:
+        await service.delete_generation(generation_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Failed to delete record: {e}",
+        ) from e
