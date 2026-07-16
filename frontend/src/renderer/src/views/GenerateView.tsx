@@ -17,7 +17,8 @@ import {
   AlertTriangle,
   ShieldAlert,
   CheckCircle,
-  Info
+  Info,
+  Wand2
 } from 'lucide-react'
 import { CanvasMaskEditor } from '../components/CanvasMaskEditor'
 
@@ -74,6 +75,7 @@ export function GenerateView(): React.JSX.Element {
   const isLoopRunning = useRef(false)
   const prevGenerating = useRef(false)
   const remainingLoopsRef = useRef(0)
+  const [optimizingPrompt, setOptimizingPrompt] = useState(false)
 
   // Realtime Log States
   const [serverLogs, setServerLogs] = useState<string[]>([])
@@ -360,6 +362,33 @@ export function GenerateView(): React.JSX.Element {
       })
     } catch (err) {
       console.error('Failed to request cancellation:', err)
+    }
+  }
+
+  async function handleOptimizePrompt(): Promise<void> {
+    if (!prompt.trim()) return
+    setOptimizingPrompt(true)
+    setErrorMsg(null)
+    try {
+      const response = await fetch('http://127.0.0.1:8000/api/v1/generations/optimize-prompt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ prompt })
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setPrompt(data.optimized_prompt)
+      } else {
+        const errData = await response.json()
+        setErrorMsg(errData.detail || 'Failed to optimize prompt via Ollama.')
+      }
+    } catch (err) {
+      console.error('Failed to request prompt optimization:', err)
+      setErrorMsg('Lỗi kết nối tới Ollama backend.')
+    } finally {
+      setOptimizingPrompt(false)
     }
   }
 
@@ -762,9 +791,20 @@ export function GenerateView(): React.JSX.Element {
           <div className="space-y-4 flex-shrink-0">
             {/* Positive Prompt */}
             <div className="space-y-1.5">
-              <div className="flex items-center space-x-2 text-xs font-semibold text-slate-400">
-                <Sparkles className="h-3.5 w-3.5 text-violet-400" />
-                <span>POSITIVE PROMPT</span>
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-400">
+                <div className="flex items-center space-x-2">
+                  <Sparkles className="h-3.5 w-3.5 text-violet-400" />
+                  <span>POSITIVE PROMPT</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleOptimizePrompt}
+                  disabled={generating || optimizingPrompt || !prompt.trim()}
+                  className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-violet-600/10 border border-violet-500/20 text-[10px] font-bold text-violet-400 hover:bg-violet-600/20 hover:text-violet-300 disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer"
+                >
+                  <Wand2 className={`h-3 w-3 ${optimizingPrompt ? 'animate-pulse' : ''}`} />
+                  <span>{optimizingPrompt ? 'OPTIMIZING...' : 'ENHANCE VIA OLLAMA'}</span>
+                </button>
               </div>
               <textarea
                 value={prompt}

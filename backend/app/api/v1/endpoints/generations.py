@@ -107,3 +107,30 @@ async def delete_generation_record(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Failed to delete record: {e}",
         ) from e
+
+
+from pydantic import BaseModel
+
+
+class OptimizePromptRequest(BaseModel):
+    prompt: str
+
+
+class OptimizePromptResponse(BaseModel):
+    optimized_prompt: str
+
+
+@router.post("/optimize-prompt", response_model=OptimizePromptResponse)
+async def optimize_prompt_endpoint(
+    payload: OptimizePromptRequest,
+    service: "GenerationService" = Depends(get_generation_service),
+) -> OptimizePromptResponse:
+    """Optimize and translate a prompt using local Ollama model."""
+    try:
+        optimized = await service.optimize_prompt(payload.prompt)
+        return OptimizePromptResponse(optimized_prompt=optimized)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        ) from e

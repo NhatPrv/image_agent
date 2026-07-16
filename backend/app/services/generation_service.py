@@ -597,3 +597,84 @@ class GenerationService:
         # SQLAlchemy cascade="all, delete-orphan" handles the ImageModels
         await self._generation_repo.delete(generation_id)
         logger.info("Successfully deleted generation record: %s", generation_id)
+
+    async def optimize_prompt(self, prompt: str) -> str:
+        """Call local Ollama instance to translate and optimize the image generation prompt."""
+        import httpx
+
+        ollama_url = "http://127.0.0.1:11434"
+
+        # 1. Fetch available models to find the best candidate
+        try:
+            async with httpx.AsyncClient(timeout=2.0) as client:
+                res = await client.get(f"{ollama_url}/api/tags")
+                data = res.json()
+                models = [m["name"] for m in data.get("models", [])]
+        except Exception as e:
+            raise RuntimeError(
+                f"Ollama is not running. Please start Ollama on your machine first. (Error: {e})"
+            )
+
+        # Select model (prefer llama3.1:8b, then qwen2.5-coder:7b, then whatever is available)
+        selected_model = None
+        for preferred in ["llama3.1:8b", "qwen2.5-coder:7b", "llama3.1", "qwen2.5-coder"]:
+            # Match partial name
+            for m in models:
+                if preferred in m:
+                    selected_model = m
+                    break
+            if selected_model:
+                break
+
+        if not selected_model and models:
+            # Fallback to first model that is not Nomics embedding
+            for m in models:
+                if "embed" not in m:
+                    selected_model = m
+                    break
+
+        if not selected_model:
+            raise RuntimeError("No suitable text generation model found in Ollama.")
+
+        # 2. Call Ollama generate API
+        system_prompt = (
+            "You are a Stable Diffusion prompt optimization expert. "
+            "Your task is to take the user's input prompt (which may be in Vietnamese or English) "
+            "and convert it into an optimized, highly detailed, comma-separated English prompt "
+            "suitable for Stable Diffusion XL.\n"
+            "Rules:\n"
+            "1. Translate the prompt to English if it is in another language.\n"
+            "2. Expand it to include descriptive keywords for style, lighting, camera settings, and level of detail.\n"
+            "3. Keep the output concise and under 50 words (comma-separated tags are preferred).\n"
+            "4. Respond ONLY with the optimized English prompt. Do not include any explanations, introduction, quotes, or conversational filler."
+        )
+
+        prompt_message = f"User input prompt to optimize:\n{prompt}"
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.post(
+                    f"{ollama_url}/api/chat",
+                    json={
+                        "model": selected_model,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": prompt_message},
+                        ],
+                        "options": {
+                            "temperature": 0.3,
+                            "top_p": 0.9,
+                        },
+                        "stream": False,
+                    },
+                )
+                response_data = response.json()
+                optimized = response_data.get("message", {}).get("content", "").strip()
+                # Clean up wrapping quotes if any
+                if (optimized.startswith('"') and optimized.endswith('"')) or (
+                    optimized.startswith("'") and optimized.endswith("'")
+                ):
+                    optimized = optimized[1:-1].strip()
+                return optimized if optimized else prompt
+        except Exception as e:
+            raise RuntimeError(f"Ollama prompt optimization request failed: {e}")
