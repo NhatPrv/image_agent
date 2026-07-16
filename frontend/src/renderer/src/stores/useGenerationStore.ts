@@ -62,6 +62,10 @@ interface GenerationState {
   totalSteps: number
   previewImage: string | null // Base64 encoded or absolute file URL
 
+  // Loop generation states
+  loopEnabled: boolean
+  loopCount: number
+
   // History list
   history: GenerationRecord[]
 
@@ -86,6 +90,8 @@ interface GenerationState {
   addHistoryItem: (item: GenerationRecord) => void
   updateHistoryItem: (id: string, updates: Partial<GenerationRecord>) => void
   resetProgress: () => void
+  setLoopEnabled: (enabled: boolean) => void
+  setLoopCount: (count: number) => void
 }
 
 export const useGenerationStore = create<GenerationState>((set) => ({
@@ -103,6 +109,9 @@ export const useGenerationStore = create<GenerationState>((set) => ({
   inputImagePath: null,
   maskImagePath: null,
   denoiseStrength: 0.75,
+
+  loopEnabled: false,
+  loopCount: 5,
 
   generating: false,
   currentGenerationId: null,
@@ -133,5 +142,7 @@ export const useGenerationStore = create<GenerationState>((set) => ({
       previewImage: null,
       currentGenerationId: null,
       generating: false
-    })
+    }),
+  setLoopEnabled: (loopEnabled) => set({ loopEnabled }),
+  setLoopCount: (loopCount) => set({ loopCount })
 }))

@@ -65,9 +65,11 @@ export function GenerateView(): React.JSX.Element {
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'editor' | 'output'>('editor')
   const [isFullscreen, setIsFullscreen] = useState(false)
 
-  // Loop Generation States
-  const [loopEnabled, setLoopEnabled] = useState(false)
-  const [loopCount, setLoopCount] = useState<number>(5)
+  // Loop Generation States (Persisted in Zustand store)
+  const loopEnabled = useGenerationStore((state) => state.loopEnabled)
+  const setLoopEnabled = useGenerationStore((state) => state.setLoopEnabled)
+  const loopCount = useGenerationStore((state) => state.loopCount)
+  const setLoopCount = useGenerationStore((state) => state.setLoopCount)
   const [remainingLoops, setRemainingLoops] = useState<number>(0)
   const isLoopRunning = useRef(false)
 
