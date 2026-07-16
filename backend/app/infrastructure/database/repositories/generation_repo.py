@@ -10,6 +10,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.core.entities.generation import (
     ControlNetConfig,
@@ -17,6 +18,7 @@ from app.core.entities.generation import (
     GenerationParams,
     LoRAConfig,
 )
+from app.core.entities.image_record import ImageRecord
 from app.core.enums.generation_type import GenerationType
 from app.core.enums.scheduler_type import SchedulerType
 from app.core.enums.status import GenerationStatus
@@ -38,7 +40,12 @@ class SQLAlchemyGenerationRepository(BaseRepository[GenerationModel], IGeneratio
 
     async def get_by_id(self, entity_id: str) -> GenerationEntity | None:
         """Retrieve a GenerationEntity by its unique ID."""
-        db_model = await super().get_by_id(entity_id)
+        result = await self._session.execute(
+            select(GenerationModel)
+            .where(GenerationModel.id == entity_id)
+            .options(selectinload(GenerationModel.images))
+        )
+        db_model = result.scalar_one_or_none()
         if db_model is None:
             return None
         return self._to_entity(db_model)
@@ -113,7 +120,10 @@ class SQLAlchemyGenerationRepository(BaseRepository[GenerationModel], IGeneratio
     async def get_recent(self, limit: int = 50) -> list[GenerationEntity]:
         """Fetch recently created generation entities (no offset)."""
         result = await self._session.execute(
-            select(GenerationModel).order_by(GenerationModel.created_at.desc()).limit(limit)
+            select(GenerationModel)
+            .options(selectinload(GenerationModel.images))
+            .order_by(GenerationModel.created_at.desc())
+            .limit(limit)
         )
         return [self._to_entity(row) for row in result.scalars().all()]
 
@@ -121,6 +131,7 @@ class SQLAlchemyGenerationRepository(BaseRepository[GenerationModel], IGeneratio
         """Fetch generation history with pagination support (limit + offset)."""
         result = await self._session.execute(
             select(GenerationModel)
+            .options(selectinload(GenerationModel.images))
             .order_by(GenerationModel.created_at.desc())
             .limit(limit)
             .offset(offset)
@@ -182,6 +193,45 @@ class SQLAlchemyGenerationRepository(BaseRepository[GenerationModel], IGeneratio
             mask_image_path=mask_image_path,
         )
 
+        output_images = []
+        try:
+            # Check if images relationship was loaded/available
+            if db_model.images:
+                for img in db_model.images:
+                    img_tags = []
+                    if img.tags_json:
+                        try:
+                            img_tags = json.loads(img.tags_json)
+                        except Exception:
+                            pass
+                    img_meta = {}
+                    if img.metadata_json:
+                        try:
+                            img_meta = json.loads(img.metadata_json)
+                        except Exception:
+                            pass
+                    output_images.append(
+                        ImageRecord(
+                            id=img.id,
+                            generation_id=img.generation_id,
+                            filename=img.filename,
+                            path=img.path,
+                            thumbnail_path=img.thumbnail_path,
+                            width=img.width,
+                            height=img.height,
+                            seed_used=img.seed_used,
+                            format=img.format,
+                            size_bytes=img.size_bytes,
+                            is_favorite=img.is_favorite,
+                            rating=img.rating,
+                            tags=img_tags,
+                            created_at=img.created_at,
+                            metadata=img_meta,
+                        )
+                    )
+        except Exception as e:
+            logger.warning("Failed to populate output images from relationship: %s", str(e))
+
         return GenerationEntity(
             id=db_model.id,
             params=params,
@@ -190,7 +240,7 @@ class SQLAlchemyGenerationRepository(BaseRepository[GenerationModel], IGeneratio
             started_at=db_model.started_at,
             completed_at=db_model.completed_at,
             duration_ms=db_model.duration_ms,
-            output_images=[],  # Images are queried separately via IImageRepository
+            output_images=output_images,
             seed_used=db_model.seed_used,
             error_message=db_model.error_message,
             metadata=metadata,

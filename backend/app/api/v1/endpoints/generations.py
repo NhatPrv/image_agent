@@ -49,6 +49,7 @@ async def create_generation(
         # Convert entity to dict, then manually convert params to dict
         entity_dict = entity.model_dump()
         entity_dict["params"] = entity.params.model_dump()
+        entity_dict["images"] = [img.model_dump() for img in entity.output_images]
         return GenerationResponse(**entity_dict)
     except Exception as e:
         raise HTTPException(
@@ -69,6 +70,7 @@ async def list_history(
     for e in entities:
         d = e.model_dump()
         d["params"] = e.params.model_dump()
+        d["images"] = [img.model_dump() for img in e.output_images]
         responses.append(GenerationResponse(**d))
     return responses
 
@@ -83,6 +85,7 @@ async def get_generation_status(
         entity = await service.get_generation(generation_id)
         d = entity.model_dump()
         d["params"] = entity.params.model_dump()
+        d["images"] = [img.model_dump() for img in entity.output_images]
         return GenerationResponse(**d)
     except Exception as e:
         raise HTTPException(
