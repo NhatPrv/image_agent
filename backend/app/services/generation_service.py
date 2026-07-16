@@ -122,6 +122,29 @@ class GenerationService:
                     batch_size=params_data.get("batch_size", 1),
                 )
 
+                # Check if all images in this json file actually exist on disk.
+                # If they do not exist, we should clean up the orphan JSON metadata file!
+                images_paths = data.get("images", [])
+                valid_images = []
+                for img_path_str in images_paths:
+                    img_file_path = Path(img_path_str)
+                    if not img_file_path.is_absolute():
+                        img_file_path = outputs_dir / img_file_path
+                    if img_file_path.exists():
+                        valid_images.append(img_file_path)
+
+                if not valid_images:
+                    try:
+                        json_path.unlink()
+                        logger.info(
+                            "Deleted orphan metadata JSON file (image missing): %s", json_path
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            "Failed to delete orphan JSON file %s: %s", json_path, str(e)
+                        )
+                    continue
+
                 created_at_str = data.get("created_at")
                 completed_at_str = data.get("completed_at")
 
@@ -149,7 +172,6 @@ class GenerationService:
                 await self._generation_repo.save(entity)
 
                 # Reconstruct ImageRecords and save them
-                images_paths = data.get("images", [])
 
                 for img_path_str in images_paths:
                     img_file_path = Path(img_path_str)
