@@ -117,6 +117,18 @@ class SQLAlchemyGenerationRepository(BaseRepository[GenerationModel], IGeneratio
         """Update an existing generation entity (alias for save)."""
         await self.save(entity)
 
+    async def delete(self, entity_id: str) -> None:
+        """Delete a record matching the primary key."""
+        result = await self._session.execute(
+            select(GenerationModel).where(GenerationModel.id == entity_id)
+        )
+        db_model = result.scalar_one_or_none()
+        if db_model is not None:
+            await self._session.delete(db_model)
+            await self._session.flush()
+        else:
+            logger.warning("Attempted to delete non-existent GenerationModel: %s", entity_id)
+
     async def get_recent(self, limit: int = 50) -> list[GenerationEntity]:
         """Fetch recently created generation entities (no offset)."""
         result = await self._session.execute(
