@@ -67,6 +67,7 @@ class SQLAlchemyGenerationRepository(BaseRepository[GenerationModel], IGeneratio
             extra_dict["input_image_path"] = entity.params.input_image_path
         if entity.params.mask_image_path:
             extra_dict["mask_image_path"] = entity.params.mask_image_path
+        extra_dict["denoise_strength"] = entity.params.denoise_strength
 
         extra_str = json.dumps(extra_dict) if extra_dict else None
         meta_str = json.dumps(entity.metadata) if entity.metadata else None
@@ -177,6 +178,7 @@ class SQLAlchemyGenerationRepository(BaseRepository[GenerationModel], IGeneratio
 
         input_image_path = extra.pop("input_image_path", None)
         mask_image_path = extra.pop("mask_image_path", None)
+        denoise_strength = extra.pop("denoise_strength", 0.75)
 
         metadata = {}
         if db_model.metadata_json:
@@ -203,6 +205,7 @@ class SQLAlchemyGenerationRepository(BaseRepository[GenerationModel], IGeneratio
             extra=extra,
             input_image_path=input_image_path,
             mask_image_path=mask_image_path,
+            denoise_strength=denoise_strength,
         )
 
         output_images = []
