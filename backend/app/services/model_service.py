@@ -51,6 +51,18 @@ class ModelService:
         models_dir = Path(self._settings.paths.models_dir)
         scanned_models = await self._loader.scan_models(models_dir)
 
+        # 1. Clean up registered models whose files have been deleted from disk
+        db_models = await self._repo.get_all()
+        for db_model in db_models:
+            if not Path(db_model.path).exists():
+                logger.info(
+                    "Model file not found on disk: %s (ID: %s). Removing from database registration.",
+                    db_model.path,
+                    db_model.id,
+                )
+                await self._repo.delete(db_model.id)
+
+        # 2. Register newly scanned models
         registered_models: list[ModelInfo] = []
 
         for model in scanned_models:
