@@ -121,6 +121,10 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
             msg = "Pipeline is not loaded. Call load() first."
             raise GenerationError(msg)
 
+        # ─── 0.1 Apply LoRA Weights ───
+        lora_inputs = params.extra.get("lora_inputs", [])
+        self.apply_loras(lora_inputs)
+
         if not params.input_image_path:
             msg = "Input image path is required for Image-to-Image generation."
             raise GenerationError(msg)

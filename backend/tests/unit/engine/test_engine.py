@@ -107,3 +107,34 @@ async def test_model_loader_detects_sd15(mock_exists, mock_stat, mock_read_heade
     assert info.component_type == ModelComponentType.CHECKPOINT
     assert info.architecture == ModelArchitecture.SD_1_5
     assert info.size_bytes == 2 * 1024 * 1024 * 1024
+
+
+def test_apply_loras_on_pipeline():
+    """Verify that BaseDiffusionPipeline.apply_loras loads and sets adapters properly."""
+    from app.engine.pipelines.base import BaseDiffusionPipeline
+
+    settings = Settings()
+    pipe_wrapper = BaseDiffusionPipeline(settings)
+
+    # Mock diffusers pipeline object
+    mock_pipe = MagicMock()
+    pipe_wrapper.pipeline = mock_pipe
+
+    # Call apply_loras with no inputs
+    pipe_wrapper.apply_loras(None)
+    mock_pipe.unload_lora_weights.assert_called_once()
+    mock_pipe.load_lora_weights.assert_not_called()
+
+    # Reset mocks
+    mock_pipe.reset_mock()
+
+    # Call apply_loras with some LoRAs
+    lora_inputs = [("path/to/lora1.safetensors", 0.75), ("path/to/lora2.safetensors", 0.5)]
+    pipe_wrapper.apply_loras(lora_inputs)
+
+    assert mock_pipe.unload_lora_weights.call_count == 1
+    assert mock_pipe.load_lora_weights.call_count == 2
+    mock_pipe.load_lora_weights.assert_any_call("path/to/lora1.safetensors", adapter_name="adapter_0")
+    mock_pipe.load_lora_weights.assert_any_call("path/to/lora2.safetensors", adapter_name="adapter_1")
+
+    mock_pipe.set_adapters.assert_called_once_with(["adapter_0", "adapter_1"], adapter_weights=[0.75, 0.5])

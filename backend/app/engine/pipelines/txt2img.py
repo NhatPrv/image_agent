@@ -138,6 +138,10 @@ class Txt2ImgPipeline(BaseDiffusionPipeline):
             msg = "Pipeline is not loaded. Call load() first."
             raise GenerationError(msg)
 
+        # ─── 0.1 Apply LoRA Weights ───
+        lora_inputs = params.extra.get("lora_inputs", [])
+        self.apply_loras(lora_inputs)
+
         # ─── 0.2. Optimize and Enhance Prompts for Realism & Quality ───
         prompt = params.prompt
         negative_prompt = params.negative_prompt or ""

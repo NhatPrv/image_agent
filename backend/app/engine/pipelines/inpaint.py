@@ -121,6 +121,10 @@ class InpaintPipeline(BaseDiffusionPipeline):
             msg = "Pipeline is not loaded. Call load() first."
             raise GenerationError(msg)
 
+        # ─── 0.1 Apply LoRA Weights ───
+        lora_inputs = params.extra.get("lora_inputs", [])
+        self.apply_loras(lora_inputs)
+
         if not params.input_image_path or not params.mask_image_path:
             msg = "Both input image path and mask image path are required for Inpainting."
             raise GenerationError(msg)

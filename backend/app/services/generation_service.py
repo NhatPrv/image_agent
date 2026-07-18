@@ -26,7 +26,11 @@ if TYPE_CHECKING:
     from app.core.interfaces.ai_engine import IAIEngine
     from app.core.interfaces.event_bus import IEventBus
     from app.core.interfaces.queue_manager import IQueueManager
-    from app.core.interfaces.repositories import IGenerationRepository, IImageRepository
+    from app.core.interfaces.repositories import (
+        IGenerationRepository,
+        IImageRepository,
+        IModelRepository,
+    )
     from app.core.interfaces.storage import IStorage
 
 logger = logging.getLogger(__name__)
@@ -40,6 +44,7 @@ class GenerationService:
         settings: Settings,
         generation_repo: IGenerationRepository,
         image_repo: IImageRepository,
+        model_repo: IModelRepository,
         queue_manager: IQueueManager,
         ai_engine: IAIEngine,
         storage: IStorage,
@@ -49,6 +54,7 @@ class GenerationService:
         self._settings = settings
         self._generation_repo = generation_repo
         self._image_repo = image_repo
+        self._model_repo = model_repo
         self._queue_manager = queue_manager
         self._engine = ai_engine
         self._storage = storage
@@ -409,6 +415,17 @@ class GenerationService:
         try:
             # Add generation_id to params extra dict to thread it down
             entity.params.extra["generation_id"] = generation_id
+
+            # Resolve LoRA model IDs to paths and thread them down in params.extra
+            lora_inputs = []
+            if entity.params.loras:
+                for lora_config in entity.params.loras:
+                    lora_model = await self._model_repo.get_by_id(lora_config.model_id)
+                    if lora_model:
+                        lora_inputs.append((lora_model.path, lora_config.weight))
+                    else:
+                        logger.warning("LoRA model with ID %s not found in registry.", lora_config.model_id)
+            entity.params.extra["lora_inputs"] = lora_inputs
 
             # Execute generation inside AI engine
             image_paths = await self._engine.generate(entity.params, _on_progress)

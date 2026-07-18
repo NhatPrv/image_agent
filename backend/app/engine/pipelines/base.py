@@ -164,3 +164,45 @@ class BaseDiffusionPipeline:
                 self.pipeline.enable_sequential_cpu_offload()
             except Exception as e:
                 logger.warning("Could not enable sequential CPU offload: %s", str(e))
+
+    def apply_loras(self, lora_inputs: list[tuple[str, float]] | None) -> None:
+        """Apply LoRA weights to the pipeline.
+
+        Args:
+            lora_inputs: A list of tuples containing (lora_path, weight)
+        """
+        if self.pipeline is None:
+            return
+
+        # 1. Unload any existing LoRA weights to start clean
+        try:
+            self.pipeline.unload_lora_weights()
+            logger.info("Unloaded existing LoRA weights.")
+        except Exception as e:
+            # Might fail if no LoRAs were loaded previously, which is fine
+            pass
+
+        if not lora_inputs:
+            return
+
+        # 2. Load and set adapters
+        adapter_names = []
+        adapter_weights = []
+
+        for idx, (lora_path, weight) in enumerate(lora_inputs):
+            adapter_name = f"adapter_{idx}"
+            try:
+                logger.info("Loading LoRA weights from %s with weight %.2f", lora_path, weight)
+                self.pipeline.load_lora_weights(lora_path, adapter_name=adapter_name)
+                adapter_names.append(adapter_name)
+                adapter_weights.append(weight)
+            except Exception as e:
+                logger.error("Failed to load LoRA from %s: %s", lora_path, str(e))
+
+        # 3. Set the active adapters and their weights
+        if adapter_names:
+            try:
+                self.pipeline.set_adapters(adapter_names, adapter_weights=adapter_weights)
+                logger.info("Successfully activated LoRAs: %s with weights %s", adapter_names, adapter_weights)
+            except Exception as e:
+                logger.error("Failed to set active LoRA adapters: %s", str(e))

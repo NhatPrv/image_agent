@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.v1.schemas import GenerateRequest, GenerationResponse
-from app.core.entities.generation import GenerationParams
+from app.core.entities.generation import GenerationParams, LoRAConfig
 from app.di.container import get_generation_service
 
 if TYPE_CHECKING:
@@ -28,6 +28,12 @@ async def create_generation(
 ) -> GenerationResponse:
     """Submit a generation request to the priority queue."""
     # Convert DTO schema to core GenerationParams entity helper
+    loras = (
+        [LoRAConfig(model_id=l.model_id, weight=l.weight) for l in payload.loras]
+        if payload.loras
+        else None
+    )
+
     params = GenerationParams(
         prompt=payload.prompt,
         negative_prompt=payload.negative_prompt,
@@ -41,6 +47,7 @@ async def create_generation(
         type=payload.type,
         input_image_path=payload.input_image_path,
         denoise_strength=payload.denoise_strength,
+        loras=loras,
         batch_size=1,  # Support single generation per request initially
     )
 

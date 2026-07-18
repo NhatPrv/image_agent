@@ -77,6 +77,12 @@ export function GenerateView(): React.JSX.Element {
   const remainingLoopsRef = useRef(0)
   const [optimizingPrompt, setOptimizingPrompt] = useState(false)
 
+  interface ActiveLoRA {
+    modelId: string
+    weight: number
+  }
+  const [activeLoras, setActiveLoras] = useState<ActiveLoRA[]>([])
+
   // Realtime Log States
   const [serverLogs, setServerLogs] = useState<string[]>([])
   const [warningLogs, setWarningLogs] = useState<string[]>([])
@@ -262,7 +268,11 @@ export function GenerateView(): React.JSX.Element {
       input_image_path: finalInputPath,
       mask_image_path: finalMaskPath,
       denoise_strength: type !== 'txt2img' ? denoiseStrength : undefined,
-      priority: 'normal'
+      priority: 'normal',
+      loras: activeLoras.map((lora) => ({
+        model_id: lora.modelId,
+        weight: lora.weight
+      }))
     }
 
     try {
@@ -450,12 +460,100 @@ export function GenerateView(): React.JSX.Element {
             <option value="" disabled>
               Select model checkpoint...
             </option>
-            {models.map((model) => (
+            {models.filter(m => m.component_type === 'checkpoint').map((model) => (
               <option key={model.id} value={model.id}>
                 {model.name} ({model.architecture.toUpperCase()})
               </option>
             ))}
           </select>
+        </div>
+
+        {/* LoRA Configuration Section */}
+        <div className="space-y-3 bg-slate-900/40 border border-slate-800/60 rounded-2xl p-4">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-slate-300 tracking-wider flex items-center gap-1.5">
+              🎨 LORA STYLES
+            </label>
+            <button
+              type="button"
+              disabled={generating}
+              onClick={() => {
+                const availableLoras = models.filter(m => m.component_type === 'lora');
+                const unusedLora = availableLoras.find(l => !activeLoras.some(al => al.modelId === l.id));
+                if (unusedLora) {
+                  setActiveLoras([...activeLoras, { modelId: unusedLora.id, weight: 1.0 }]);
+                } else if (availableLoras.length > 0) {
+                  setActiveLoras([...activeLoras, { modelId: availableLoras[0].id, weight: 1.0 }]);
+                }
+              }}
+              className="text-[10px] font-semibold text-violet-400 hover:text-violet-300 transition flex items-center gap-0.5"
+            >
+              + ADD LORA
+            </button>
+          </div>
+
+          {activeLoras.length === 0 ? (
+            <div className="text-[11px] text-slate-500 italic py-1.5 text-center bg-slate-950/30 border border-dashed border-slate-800/80 rounded-xl">
+              No LoRA models applied
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {activeLoras.map((activeLora, idx) => {
+                const availableLoras = models.filter(m => m.component_type === 'lora');
+                return (
+                  <div key={idx} className="space-y-2 bg-slate-950/40 border border-slate-800/80 rounded-xl p-3 relative group">
+                    <button
+                      type="button"
+                      onClick={() => setActiveLoras(activeLoras.filter((_, i) => i !== idx))}
+                      className="absolute top-2 right-2 text-slate-500 hover:text-red-400 text-xs transition"
+                    >
+                      ×
+                    </button>
+                    
+                    <div className="space-y-1">
+                      <select
+                        value={activeLora.modelId}
+                        onChange={(e) => {
+                          const newLoras = [...activeLoras];
+                          newLoras[idx].modelId = e.target.value;
+                          setActiveLoras(newLoras);
+                        }}
+                        className="w-full bg-slate-900 border border-slate-850 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-violet-500/50"
+                      >
+                        {availableLoras.map((lora) => (
+                          <option key={lora.id} value={lora.id}>
+                            {lora.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] text-slate-400">
+                        <span>Weight</span>
+                        <span className="font-mono text-violet-400 font-medium">
+                          {activeLora.weight.toFixed(2)}
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="-2"
+                        max="2"
+                        step="0.05"
+                        value={activeLora.weight}
+                        onChange={(e) => {
+                          const newLoras = [...activeLoras];
+                          newLoras[idx].weight = parseFloat(e.target.value);
+                          setActiveLoras(newLoras);
+                        }}
+                        className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-violet-500"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Aspect Ratio Config */}

@@ -47,6 +47,13 @@ class ModelLoadRequest(BaseModel):
 # ─── Generation Schemas ───
 
 
+class LoRARequestConfig(BaseModel):
+    """Configuration for a LoRA model in a generation request."""
+
+    model_id: str = Field(..., description="ID of the LoRA model in the registry.")
+    weight: float = Field(default=1.0, ge=-2.0, le=2.0, description="Denoising or application weight.")
+
+
 class GenerateRequest(BaseModel):
     """Payload to initiate a new image generation request."""
 
@@ -65,6 +72,9 @@ class GenerateRequest(BaseModel):
     input_image_path: str | None = Field(default=None)
     mask_image_path: str | None = Field(default=None)
     denoise_strength: float = Field(default=0.75, ge=0.0, le=1.0)
+
+    # Optional: LoRAs
+    loras: list[LoRARequestConfig] | None = Field(default=None, description="Optional LoRAs to apply.")
 
     # Scheduler priority
     priority: QueuePriority = Field(default=QueuePriority.NORMAL)
