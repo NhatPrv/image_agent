@@ -274,8 +274,8 @@
 
 ### 2.1 Advanced Generation
 
-- [ ] 🔴 Inpainting pipeline
-- [ ] 🔴 Canvas/mask editor (brush, eraser, clear)
+- [x] 🔴 Inpainting pipeline
+- [x] 🔴 Canvas/mask editor (brush, eraser, clear)
 - [ ] 🟡 Outpainting pipeline
 - [ ] 🔴 ControlNet integration (Canny, Depth, OpenPose)
 - [ ] 🟡 ControlNet preprocessors UI
@@ -286,8 +286,8 @@
 
 ### 2.2 Gallery & Media
 
-- [ ] 🟡 Gallery page (grid view, infinite scroll)
-- [ ] 🟡 Image detail view (full-size + metadata)
+- [x] 🟡 Gallery page (grid view, infinite scroll)
+- [x] 🟡 Image detail view (full-size + metadata)
 - [ ] 🟡 Search & filter (by prompt, model, date)
 - [ ] 🟢 Favorite images
 - [ ] 🟢 Image tags
@@ -295,11 +295,11 @@
 
 ### 2.3 Download Manager
 
-- [ ] 🟡 Download engine (multi-thread, resume)
+- [x] 🟡 Download engine (multi-thread, resume)
 - [ ] 🟡 HuggingFace integration
 - [ ] 🟡 CivitAI integration
-- [ ] 🟡 Download progress UI
-- [ ] 🟢 Model auto-detection after download
+- [x] 🟡 Download progress UI
+- [x] 🟢 Model auto-detection after download
 
 ### 2.4 Queue Improvements
 
@@ -313,7 +313,7 @@
 - [ ] 🟡 Keyboard shortcuts (generate, cancel, navigate)
 - [ ] 🟢 Drag & drop image for img2img/inpaint
 - [ ] 🟢 Context menus
-- [ ] 🟢 Toast notifications
+- [x] 🟢 Toast notifications
 
 ---
 
@@ -332,15 +332,15 @@
 - [ ] 🟡 Style presets
 - [ ] 🟢 Prompt history & autocomplete
 - [ ] 🟢 Token counter
-- [ ] 🟡 Local LLM prompt enhancement
+- [x] 🟡 Local LLM prompt enhancement
 
 ### 3.3 SDXL
 
-- [ ] 🔴 SDXL pipeline (txt2img, img2img)
-- [ ] 🔴 SDXL VRAM optimization for 8GB
+- [x] 🔴 SDXL pipeline (txt2img, img2img)
+- [x] 🔴 SDXL VRAM optimization for 8GB
 - [ ] 🟡 SDXL LoRA support
 - [ ] 🟡 SDXL ControlNet support
-- [ ] 🟢 SDXL resolution presets
+- [x] 🟢 SDXL resolution presets
 
 ### 3.4 Plugin System
 
@@ -363,7 +363,7 @@
 
 ### 3.6 Performance
 
-- [ ] 🔴 Advanced VRAM management
+- [x] 🔴 Advanced VRAM management
 - [ ] 🟡 Performance profiler
 - [ ] 🟡 Memory leak detection
 
@@ -427,19 +427,19 @@
 | Phase | Total Tasks | Completed | In Progress | Remaining |
 |---|---|---|---|---|
 | Phase 0 | 8 | 8 | 0 | 0 |
-| Phase 1 | ~95 | 4 | 3 | ~88 |
-| Phase 2 | ~28 | 0 | 0 | ~28 |
-| Phase 3 | ~25 | 0 | 0 | ~25 |
-| Phase 4 | ~8 | 0 | 0 | ~8 |
-| Phase 5 | ~7 | 0 | 0 | ~7 |
-| Ongoing | ~12 | 0 | 0 | ~12 |
-| **Total** | **~183** | **8** | **0** | **~175** |
+| Phase 1 | ~95 | 91 | 0 | 4 |
+| Phase 2 | ~28 | 8 | 0 | 20 |
+| Phase 3 | ~25 | 5 | 0 | 20 |
+| Phase 4 | ~8 | 0 | 0 | 8 |
+| Phase 5 | ~7 | 0 | 0 | 7 |
+| Ongoing | ~12 | 0 | 0 | 12 |
+| **Total** | **~183** | **112** | **0** | **71** |
 
 ---
 
-> 📝 **Cập nhật lần cuối**: Sau khi hoàn thành Phase 0 (Documentation)
+> 📝 **Cập nhật lần cuối**: Tích hợp Tiled Img2Img & tối ưu hóa SQLite locking (Phase 2 + 3)
 >
-> 📌 **Bước tiếp theo**: Bắt đầu Phase 1 — Project Setup & Infrastructure
+> 📌 **Bước tiếp theo**: Tiếp tục hoàn thiện các tính năng nâng cao của Phase 2 & 3
 
 ## Developer Conventions
 
