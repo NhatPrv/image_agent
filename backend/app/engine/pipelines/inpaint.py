@@ -225,7 +225,14 @@ class InpaintPipeline(BaseDiffusionPipeline):
                     callback_on_step_end=_step_callback,
                     callback_on_step_end_tensor_inputs=["latents"],
                 )
-                return output.images
+                # Composite the generated images with the original input image using mask_image
+                # White (255) in mask_image = inpainted generated region
+                # Black (0) in mask_image = original unmasked image region
+                composited_images = []
+                for gen_img in output.images:
+                    composited = PILImage.composite(gen_img, input_image, mask_image)
+                    composited_images.append(composited)
+                return composited_images
 
             return await loop.run_in_executor(None, _run_inference)
         except Exception as e:
