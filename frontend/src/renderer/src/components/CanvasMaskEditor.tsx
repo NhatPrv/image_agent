@@ -13,6 +13,7 @@ export function CanvasMaskEditor({
   height = 512
 }: CanvasMaskEditorProps): React.JSX.Element {
   const [imagePath, setImagePath] = useState<string | null>(null)
+  const [imageSrc, setImageSrc] = useState<string | null>(null)
   const [tool, setTool] = useState<'brush' | 'eraser'>('brush')
   const [brushSize, setBrushSize] = useState<number>(20)
 
@@ -145,6 +146,17 @@ export function CanvasMaskEditor({
       }
       // Save initial blank state
       saveHistory()
+    }
+  }, [imagePath])
+
+  // Convert local imagePath to base64 data URL via IPC for webSecurity bypass
+  useEffect(() => {
+    if (imagePath) {
+      window.api.readImageBase64(imagePath).then((base64) => {
+        setImageSrc(base64)
+      })
+    } else {
+      setImageSrc(null)
     }
   }, [imagePath])
 
@@ -302,7 +314,7 @@ export function CanvasMaskEditor({
           <div className="relative w-full h-full">
             {/* Base Image under the drawing canvas */}
             <img
-              src={`file://${imagePath}`}
+              src={imageSrc || ''}
               alt="Base for inpaint"
               className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
             />

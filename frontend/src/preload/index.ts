@@ -8,6 +8,7 @@ const api = {
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
   getBackendStatus: () => ipcRenderer.invoke('get-backend-status'),
   selectImage: () => ipcRenderer.invoke('select-image'),
+  readImageBase64: (filePath: string) => ipcRenderer.invoke('read-image-base64', filePath),
   saveTempImage: (base64Data: string, filename: string) =>
     ipcRenderer.invoke('save-temp-image', base64Data, filename),
   saveImageAs: (sourcePath: string) => ipcRenderer.invoke('save-image-as', sourcePath),

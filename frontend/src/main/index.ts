@@ -171,6 +171,17 @@ app.whenReady().then(() => {
     return result.filePaths[0]
   })
 
+  ipcMain.handle('read-image-base64', async (_event, filePath: string) => {
+    try {
+      const data = await fs.promises.readFile(filePath)
+      const ext = filePath.split('.').pop() || 'png'
+      return `data:image/${ext};base64,${data.toString('base64')}`
+    } catch (err) {
+      console.error('Failed to read image as base64:', err)
+      return null
+    }
+  })
+
   ipcMain.handle('save-temp-image', async (_event, base64Data: string, filename: string) => {
     try {
       const base64Clean = base64Data.replace(/^data:image\/\w+;base64,/, '')
