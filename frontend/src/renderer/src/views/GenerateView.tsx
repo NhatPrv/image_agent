@@ -975,11 +975,14 @@ export function GenerateView(): React.JSX.Element {
               </div>
             ) : type === 'inpaint' && activeWorkspaceTab === 'editor' ? (
               <CanvasMaskEditor
+                imagePath={inputImagePath}
                 width={width}
                 height={height}
-                onMaskChange={(inputImg, maskBase64) => {
-                  setParams({ inputImagePath: inputImg })
+                onMaskChange={(maskBase64) => {
                   setTempMaskBase64(maskBase64)
+                }}
+                onImageSelected={(path) => {
+                  setParams({ inputImagePath: path })
                 }}
               />
             ) : outputImage ? (

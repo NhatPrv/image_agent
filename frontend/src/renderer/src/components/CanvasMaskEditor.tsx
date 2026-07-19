@@ -2,17 +2,20 @@ import React, { useRef, useState, useEffect, useCallback } from 'react'
 import { Paintbrush, Eraser, Trash2, Undo, Upload, CheckCircle2 } from 'lucide-react'
 
 interface CanvasMaskEditorProps {
-  onMaskChange: (inputImagePath: string | null, maskBase64: string | null) => void
+  imagePath: string | null
   width: number
   height: number
+  onMaskChange: (maskBase64: string | null) => void
+  onImageSelected: (path: string | null) => void
 }
 
 export function CanvasMaskEditor({
+  imagePath,
   onMaskChange,
+  onImageSelected,
   width = 512,
   height = 512
 }: CanvasMaskEditorProps): React.JSX.Element {
-  const [imagePath, setImagePath] = useState<string | null>(null)
   const [imageSrc, setImageSrc] = useState<string | null>(null)
   const [tool, setTool] = useState<'brush' | 'eraser'>('brush')
   const [brushSize, setBrushSize] = useState<number>(20)
@@ -68,7 +71,7 @@ export function CanvasMaskEditor({
       }
       exportCtx.putImageData(imgData, 0, 0)
       const base64Mask = exportCanvas.toDataURL('image/png')
-      onMaskChange(imagePath, base64Mask)
+      onMaskChange(base64Mask)
     }
   }, [imagePath, width, height, onMaskChange])
 
@@ -77,7 +80,7 @@ export function CanvasMaskEditor({
     try {
       const selected = await window.api.selectImage()
       if (selected) {
-        setImagePath(selected)
+        onImageSelected(selected)
         // Reset canvas drawings
         clearCanvas()
         historyRef.current = []
@@ -96,7 +99,7 @@ export function CanvasMaskEditor({
     if (ctx) {
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       saveHistory()
-      onMaskChange(imagePath, null)
+      onMaskChange(null)
     }
   }
 
