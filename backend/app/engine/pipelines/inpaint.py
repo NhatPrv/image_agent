@@ -230,7 +230,11 @@ class InpaintPipeline(BaseDiffusionPipeline):
                 # Black (0) in mask_image = original unmasked image region
                 composited_images = []
                 for gen_img in output.images:
-                    composited = PILImage.composite(gen_img, input_image, mask_image)
+                    if gen_img.size != input_image.size:
+                        gen_img_resized = gen_img.resize(input_image.size, PILImage.Resampling.LANCZOS)
+                    else:
+                        gen_img_resized = gen_img
+                    composited = PILImage.composite(gen_img_resized, input_image, mask_image)
                     composited_images.append(composited)
                 return composited_images
 
