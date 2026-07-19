@@ -219,6 +219,26 @@ class GenerationService:
             synced_count,
         )
 
+        # Phase 2: Clean up orphan database records whose files no longer exist on disk
+        try:
+            db_history = await self._generation_repo.get_history(limit=500, offset=0)
+            cleaned_count = 0
+            for gen in db_history:
+                if gen.output_images:
+                    has_valid_image = False
+                    for img in gen.output_images:
+                        check_p = outputs_dir / img.path
+                        if check_p.exists():
+                            has_valid_image = True
+                            break
+                    if not has_valid_image:
+                        await self._generation_repo.delete(gen.id)
+                        cleaned_count += 1
+            if cleaned_count > 0:
+                logger.info("Cleaned up %d orphan generation records missing image files.", cleaned_count)
+        except Exception as e:
+            logger.warning("Failed to clean up orphan DB records: %s", str(e))
+
         # ─── Phase 2: Scan for all raw image files that are not in the database ───
         logger.info("Starting Phase 2: Scanning raw image files...")
         image_extensions = ("*.png", "*.jpg", "*.jpeg", "*.webp")
