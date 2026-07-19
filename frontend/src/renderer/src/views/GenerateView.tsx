@@ -931,8 +931,9 @@ export function GenerateView(): React.JSX.Element {
 
           {/* Center Workspace (Image Preview Box) */}
           <div className="flex-1 border border-slate-900 rounded-2xl bg-slate-900/10 flex items-center justify-center p-6 overflow-hidden relative">
-            {generating ? (
-              <div className="flex flex-col items-center justify-center space-y-5 max-w-sm w-full">
+            {/* 1. Generating Progress Overlay */}
+            {generating && (
+              <div className="flex flex-col items-center justify-center space-y-5 max-w-sm w-full z-20">
                 {/* WS Image Preview Frame */}
                 <div className="relative h-64 w-64 rounded-xl border border-slate-800 bg-slate-950 flex items-center justify-center overflow-hidden shadow-2xl">
                   {previewImage ? (
@@ -973,7 +974,10 @@ export function GenerateView(): React.JSX.Element {
                   <span>Cancel Generation</span>
                 </button>
               </div>
-            ) : type === 'inpaint' && activeWorkspaceTab === 'editor' ? (
+            )}
+
+            {/* 2. Inpaint Editor Canvas (Hidden when generating or not in editor) */}
+            <div className={(!generating && type === 'inpaint' && activeWorkspaceTab === 'editor') ? 'w-full h-full flex justify-center items-center' : 'hidden'}>
               <CanvasMaskEditor
                 imagePath={inputImagePath}
                 width={width}
@@ -985,7 +989,10 @@ export function GenerateView(): React.JSX.Element {
                   setParams({ inputImagePath: path })
                 }}
               />
-            ) : outputImage ? (
+            </div>
+
+            {/* 3. Output Image Preview */}
+            {!generating && !(type === 'inpaint' && activeWorkspaceTab === 'editor') && outputImage && (
               <div className="flex flex-col items-center justify-center space-y-3">
                 <div className="relative group rounded-xl overflow-hidden border border-slate-850 shadow-2xl">
                   <img
@@ -1033,7 +1040,10 @@ export function GenerateView(): React.JSX.Element {
                   )}
                 </div>
               </div>
-            ) : (
+            )}
+
+            {/* 4. Empty/Default State */}
+            {!generating && !(type === 'inpaint' && activeWorkspaceTab === 'editor') && !outputImage && (
               <div className="text-center space-y-3">
                 <div className="mx-auto h-12 w-12 rounded-xl bg-slate-900/50 border border-slate-800 flex items-center justify-center">
                   <Image className="h-6 w-6 text-slate-600" />
