@@ -416,15 +416,11 @@ class GenerationService:
             # Add generation_id to params extra dict to thread it down
             entity.params.extra["generation_id"] = generation_id
 
-            # Resolve LoRA model IDs to paths and thread them down in params.extra
+            # Populate LoRA paths directly from params.loras (already resolved in controller)
             lora_inputs = []
             if entity.params.loras:
                 for lora_config in entity.params.loras:
-                    lora_model = await self._model_repo.get_by_id(lora_config.model_id)
-                    if lora_model:
-                        lora_inputs.append((lora_model.path, lora_config.weight))
-                    else:
-                        logger.warning("LoRA model with ID %s not found in registry.", lora_config.model_id)
+                    lora_inputs.append((lora_config.path, lora_config.weight))
             entity.params.extra["lora_inputs"] = lora_inputs
 
             # Execute generation inside AI engine

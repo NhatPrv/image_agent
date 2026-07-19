@@ -9,10 +9,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.v1.schemas import GenerateRequest, GenerationResponse
 from app.core.entities.generation import GenerationParams, LoRAConfig
-from app.di.container import get_generation_service
+from app.di.container import get_generation_service, get_model_repository
 
 if TYPE_CHECKING:
     from app.services.generation_service import GenerationService
+    from app.core.interfaces.repositories import IModelRepository
 
 router = APIRouter(prefix="/generations", tags=["Generations"])
 
@@ -25,14 +26,23 @@ GenerationResponse.model_rebuild()
 async def create_generation(
     payload: GenerateRequest,
     service: "GenerationService" = Depends(get_generation_service),
+    model_repo: "IModelRepository" = Depends(get_model_repository),
 ) -> GenerationResponse:
     """Submit a generation request to the priority queue."""
-    # Convert DTO schema to core GenerationParams entity helper
-    loras = (
-        [LoRAConfig(model_id=l.model_id, weight=l.weight) for l in payload.loras]
-        if payload.loras
-        else None
-    )
+    # Convert DTO schema to core GenerationParams entity helper and resolve paths
+    loras = []
+    if payload.loras:
+        for l in payload.loras:
+            lora_model = await model_repo.get_by_id(l.model_id)
+            if lora_model:
+                loras.append(
+                    LoRAConfig(path=lora_model.path, weight=l.weight, name=lora_model.name)
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"LoRA model not found in registry: {l.model_id}",
+                )
 
     params = GenerationParams(
         prompt=payload.prompt,
