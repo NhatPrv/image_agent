@@ -138,13 +138,30 @@ class InpaintPipeline(BaseDiffusionPipeline):
                     PILImage.open(params.input_image_path) as init_img,
                     PILImage.open(params.mask_image_path) as mask_img,
                 ):
-                    # Convert input image to RGB and resize
-                    init_processed = init_img.convert("RGB").resize((params.width, params.height))
-                    # Convert mask image to grayscale and resize
-                    mask_processed = mask_img.convert("L").resize((params.width, params.height))
-                    return init_processed, mask_processed
+                    orig_img = init_img.convert("RGB")
+                    orig_w, orig_h = orig_img.size
 
-            input_image, mask_image = await loop.run_in_executor(None, _load_images)
+                    target_w = params.width
+                    target_h = params.height
+
+                    # Calculate aspect-ratio preserving containment matching frontend CSS object-contain
+                    scale = min(target_w / orig_w, target_h / orig_h)
+                    new_w = max(1, int(orig_w * scale))
+                    new_h = max(1, int(orig_h * scale))
+                    pad_x = (target_w - new_w) // 2
+                    pad_y = (target_h - new_h) // 2
+                    bbox = (pad_x, pad_y, pad_x + new_w, pad_y + new_h)
+
+                    resized_init = orig_img.resize((new_w, new_h), PILImage.Resampling.LANCZOS)
+                    input_image = PILImage.new("RGB", (target_w, target_h), (0, 0, 0))
+                    input_image.paste(resized_init, (pad_x, pad_y))
+
+                    # Frontend export canvas is already target_w x target_h (e.g. 512x512)
+                    mask_image = mask_img.convert("L").resize((target_w, target_h), PILImage.Resampling.LANCZOS)
+
+                    return orig_img, input_image, mask_image, bbox
+
+            orig_img, input_image, mask_image, bbox = await loop.run_in_executor(None, _load_images)
         except Exception as e:
             logger.error("Failed to load or process input/mask images: %s", str(e))
             msg = f"Failed processing inpaint images: {e}"
@@ -213,29 +230,50 @@ class InpaintPipeline(BaseDiffusionPipeline):
         try:
 
             def _run_inference():
-                output = self.pipeline(
-                    prompt=params.prompt,
-                    negative_prompt=params.negative_prompt,
-                    image=input_image,
-                    mask_image=mask_image,
-                    num_inference_steps=params.steps,
-                    guidance_scale=params.cfg_scale,
-                    generator=generator,
-                    num_images_per_prompt=params.batch_size,
-                    callback_on_step_end=_step_callback,
-                    callback_on_step_end_tensor_inputs=["latents"],
-                )
-                # Composite the generated images with the original input image using mask_image
-                # White (255) in mask_image = inpainted generated region
-                # Black (0) in mask_image = original unmasked image region
+                # For StableDiffusionInpaintPipeline / StableDiffusionXLInpaintPipeline,
+                # pass denoise_strength if supported, otherwise default
+                pipe_kwargs = {
+                    "prompt": params.prompt,
+                    "negative_prompt": params.negative_prompt,
+                    "image": input_image,
+                    "mask_image": mask_image,
+                    "num_inference_steps": params.steps,
+                    "guidance_scale": params.cfg_scale,
+                    "generator": generator,
+                    "num_images_per_prompt": params.batch_size,
+                    "callback_on_step_end": _step_callback,
+                    "callback_on_step_end_tensor_inputs": ["latents"],
+                }
+                if params.denoise_strength is not None:
+                    pipe_kwargs["strength"] = params.denoise_strength
+
+                output = self.pipeline(**pipe_kwargs)
+
+                # Composite the generated images onto original high-res input image
                 composited_images = []
+                orig_w, orig_h = orig_img.size
+
                 for gen_img in output.images:
+                    # 1. Match gen_img size to target input_image size if needed
                     if gen_img.size != input_image.size:
                         gen_img_resized = gen_img.resize(input_image.size, PILImage.Resampling.LANCZOS)
                     else:
                         gen_img_resized = gen_img
-                    composited = PILImage.composite(gen_img_resized, input_image, mask_image)
-                    composited_images.append(composited)
+
+                    # 2. Composite gen_img with padded input_image at target size
+                    composited_padded = PILImage.composite(gen_img_resized, input_image, mask_image)
+
+                    # 3. Crop back to the inner image region (removing letterbox padding)
+                    cropped_result = composited_padded.crop(bbox)
+
+                    # 4. Resize cropped inpaint result back to original image size
+                    result_orig_size = cropped_result.resize((orig_w, orig_h), PILImage.Resampling.LANCZOS)
+
+                    # 5. Composite onto the original full-resolution photo so unmasked area is 100% original
+                    orig_mask_resized = mask_image.crop(bbox).resize((orig_w, orig_h), PILImage.Resampling.LANCZOS)
+                    final_composite = PILImage.composite(result_orig_size, orig_img, orig_mask_resized)
+
+                    composited_images.append(final_composite)
                 return composited_images
 
             return await loop.run_in_executor(None, _run_inference)
