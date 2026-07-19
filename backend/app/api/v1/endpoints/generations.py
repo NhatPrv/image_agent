@@ -56,6 +56,7 @@ async def create_generation(
         model_id=payload.model_id,
         type=payload.type,
         input_image_path=payload.input_image_path,
+        mask_image_path=payload.mask_image_path,
         denoise_strength=payload.denoise_strength,
         loras=loras,
         batch_size=1,  # Support single generation per request initially
