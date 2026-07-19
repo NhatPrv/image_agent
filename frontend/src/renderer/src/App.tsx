@@ -13,25 +13,20 @@ function App(): React.JSX.Element {
   // Track active view state
   const [currentView, setCurrentView] = useState<string>('generate')
 
-  // Render view conditionally based on sidebar selector
-  function renderView(): React.JSX.Element {
-    switch (currentView) {
-      case 'generate':
-        return <GenerateView />
-      case 'history':
-        return <HistoryView />
-      case 'downloads':
-        return <DownloadManagerView />
-      case 'settings':
-        return <SettingsView />
-      default:
-        return <GenerateView />
-    }
-  }
-
   return (
     <MainLayout currentView={currentView} setCurrentView={setCurrentView}>
-      {renderView()}
+      <div className={currentView === 'generate' ? 'h-full w-full' : 'hidden'}>
+        <GenerateView />
+      </div>
+      <div className={currentView === 'history' ? 'h-full w-full' : 'hidden'}>
+        <HistoryView />
+      </div>
+      <div className={currentView === 'downloads' ? 'h-full w-full' : 'hidden'}>
+        <DownloadManagerView />
+      </div>
+      <div className={currentView === 'settings' ? 'h-full w-full' : 'hidden'}>
+        <SettingsView />
+      </div>
     </MainLayout>
   )
 }
