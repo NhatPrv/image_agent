@@ -134,7 +134,9 @@ def test_apply_loras_on_pipeline():
 
     assert mock_pipe.unload_lora_weights.call_count == 1
     assert mock_pipe.load_lora_weights.call_count == 2
-    mock_pipe.load_lora_weights.assert_any_call("path/to/lora1.safetensors", adapter_name="adapter_0")
-    mock_pipe.load_lora_weights.assert_any_call("path/to/lora2.safetensors", adapter_name="adapter_1")
+    import os
+    expected_dir = os.path.normpath("path/to")
+    mock_pipe.load_lora_weights.assert_any_call(expected_dir, weight_name="lora1.safetensors", adapter_name="adapter_0")
+    mock_pipe.load_lora_weights.assert_any_call(expected_dir, weight_name="lora2.safetensors", adapter_name="adapter_1")
 
     mock_pipe.set_adapters.assert_called_once_with(["adapter_0", "adapter_1"], adapter_weights=[0.75, 0.5])

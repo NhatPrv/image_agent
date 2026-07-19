@@ -6,6 +6,7 @@ Provides common methods and VRAM optimizations for all AI engine pipelines.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -192,8 +193,17 @@ class BaseDiffusionPipeline:
         for idx, (lora_path, weight) in enumerate(lora_inputs):
             adapter_name = f"adapter_{idx}"
             try:
-                logger.info("Loading LoRA weights from %s with weight %.2f", lora_path, weight)
-                self.pipeline.load_lora_weights(lora_path, adapter_name=adapter_name)
+                lora_dir = str(Path(lora_path).parent)
+                lora_file = Path(lora_path).name
+                logger.info(
+                    "Loading LoRA weights from dir: %s, file: %s with weight %.2f",
+                    lora_dir,
+                    lora_file,
+                    weight,
+                )
+                self.pipeline.load_lora_weights(
+                    lora_dir, weight_name=lora_file, adapter_name=adapter_name
+                )
                 adapter_names.append(adapter_name)
                 adapter_weights.append(weight)
             except Exception as e:
