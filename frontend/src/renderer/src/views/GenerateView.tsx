@@ -18,7 +18,8 @@ import {
   ShieldAlert,
   CheckCircle,
   Info,
-  Wand2
+  Wand2,
+  Lock
 } from 'lucide-react'
 import { CanvasMaskEditor } from '../components/CanvasMaskEditor'
 
@@ -137,6 +138,23 @@ export function GenerateView(): React.JSX.Element {
       }
     }
   }, [history])
+
+  // In Inpaint mode, automatically lock width & height to the natural dimensions of the selected input image
+  useEffect(() => {
+    if (type === 'inpaint' && inputImagePath) {
+      window.api.readImageBase64(inputImagePath).then((base64) => {
+        if (base64) {
+          const img = new globalThis.Image()
+          img.onload = () => {
+            if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+              setParams({ width: img.naturalWidth, height: img.naturalHeight })
+            }
+          }
+          img.src = base64
+        }
+      })
+    }
+  }, [type, inputImagePath, setParams])
 
   // Fetch models on component mount
   useEffect(() => {
@@ -558,9 +576,17 @@ export function GenerateView(): React.JSX.Element {
 
         {/* Aspect Ratio Config */}
         <div className="space-y-3">
-          <label className="text-xs font-semibold text-slate-400 tracking-wider">
-            IMAGE DIMENSIONS (UP TO 8K)
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold text-slate-400 tracking-wider">
+              IMAGE DIMENSIONS (UP TO 8K)
+            </label>
+            {type === 'inpaint' && (
+              <span className="text-[10px] font-bold text-amber-400 flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                <Lock className="h-3 w-3" />
+                <span>Locked for Inpaint</span>
+              </span>
+            )}
+          </div>
 
           {/* Preset Dropdown */}
           <div className="space-y-1">
@@ -601,8 +627,8 @@ export function GenerateView(): React.JSX.Element {
                   setParams({ width: w, height: h })
                 }
               }}
-              disabled={generating}
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-medium text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition cursor-pointer"
+              disabled={generating || type === 'inpaint'}
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-medium text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <option value="custom">-- Custom Resolution --</option>
               <optgroup label="Standard SD 1.5 Presets" className="bg-slate-950 text-slate-400">
@@ -656,12 +682,12 @@ export function GenerateView(): React.JSX.Element {
                 max="8192"
                 step="8"
                 value={width}
-                disabled={generating}
+                disabled={generating || type === 'inpaint'}
                 onChange={(e) => {
                   const val = parseInt(e.target.value) || 512
                   setParams({ width: val })
                 }}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
             <div className="space-y-1">
@@ -672,25 +698,37 @@ export function GenerateView(): React.JSX.Element {
                 max="8192"
                 step="8"
                 value={height}
-                disabled={generating}
+                disabled={generating || type === 'inpaint'}
                 onChange={(e) => {
                   const val = parseInt(e.target.value) || 512
                   setParams({ height: val })
                 }}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
           </div>
 
+          {/* Inpaint Lock Notice */}
+          {type === 'inpaint' && (
+            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] leading-relaxed text-amber-300 font-medium flex items-center gap-1.5">
+              <Lock className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" />
+              <span>
+                {inputImagePath
+                  ? `Độ phân giải đã khóa theo kích thước ảnh gốc (${width} × ${height} px) để nét vẽ Inpaint luôn khớp 100%.`
+                  : 'Độ phân giải sẽ tự động khóa theo ảnh gốc ngay khi bạn tải ảnh lên.'}
+              </span>
+            </div>
+          )}
+
           {/* VRAM Warning for high resolutions */}
-          {width > 2048 || height > 2048 ? (
+          {type !== 'inpaint' && (width > 2048 || height > 2048) ? (
             <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-[10px] leading-relaxed text-rose-400 font-medium">
               🚨 <strong>CRITICAL OOM RISK (4K/8K):</strong> Generating at resolutions above 2K
               requires substantial GPU VRAM. Ensure both <strong>Model CPU Offloading</strong> and{' '}
               <strong>VAE Tiling</strong> are enabled in Settings to prevent OOM crashes.
             </div>
           ) : (
-            (width > 1024 || height > 1024) && (
+            type !== 'inpaint' && (width > 1024 || height > 1024) && (
               <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] leading-relaxed text-amber-400 font-medium">
                 ⚠️ <strong>High Resolution Warning:</strong> Generating at FHD speeds requires more
                 VRAM. Make sure VRAM optimizations are enabled if you run into OOM errors.
