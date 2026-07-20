@@ -246,9 +246,9 @@ export function CanvasMaskEditor({
   }
 
   const content = (
-    <div className={`flex flex-col space-y-4 w-full items-center ${isFullscreenModal ? 'h-full justify-between' : ''}`}>
-      {/* ─── Toolbar Row ─── */}
-      <div className="flex items-center justify-between w-full bg-slate-950 border border-slate-900 rounded-xl p-3 flex-wrap gap-3">
+    <div className={`flex flex-col space-y-3 w-full items-center ${isFullscreenModal ? 'h-full justify-between' : ''}`}>
+      {/* ─── Toolbar Row (shrink-0 ensures it never overflows off top) ─── */}
+      <div className="flex items-center justify-between w-full bg-slate-950 border border-slate-900 rounded-xl p-3 flex-wrap gap-3 shrink-0">
         <div className="flex items-center space-x-1.5">
           {/* Upload Button */}
           <button
@@ -349,10 +349,10 @@ export function CanvasMaskEditor({
 
       {/* ─── Canvas Workspace Container ─── */}
       <div
-        className={`relative aspect-square w-full rounded-xl border border-slate-900 bg-slate-950 flex items-center justify-center overflow-hidden shadow-inner transition-all duration-300 ${
+        className={`relative w-full rounded-xl border border-slate-900 bg-slate-950 flex items-center justify-center overflow-hidden shadow-inner transition-all duration-300 ${
           isFullscreenModal
-            ? 'max-h-[76vh] max-w-[76vh] border-violet-500/40 shadow-2xl shadow-violet-500/10'
-            : 'max-h-[520px] max-w-[520px]'
+            ? 'aspect-square max-h-[76vh] max-w-[76vh] border-violet-500/40 shadow-2xl shadow-violet-500/10'
+            : 'max-w-[720px] h-[360px] sm:h-[400px]'
         }`}
       >
         {imagePath ? (
@@ -392,7 +392,7 @@ export function CanvasMaskEditor({
       </div>
 
       {imagePath && (
-        <div className="flex items-center justify-between w-full text-[10px] text-slate-400">
+        <div className="flex items-center justify-between w-full text-[10px] text-slate-400 shrink-0">
           <div className="flex items-center space-x-2 text-emerald-400 font-semibold uppercase tracking-wider bg-emerald-500/5 px-3 py-1 rounded-full border border-emerald-500/10">
             <CheckCircle2 className="h-3 w-3" />
             <span>Mask Layer Connected & Ready</span>

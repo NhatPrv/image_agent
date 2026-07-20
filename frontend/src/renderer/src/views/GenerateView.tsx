@@ -1015,7 +1015,7 @@ export function GenerateView(): React.JSX.Element {
             )}
 
             {/* 2. Inpaint Editor Canvas (Hidden when generating or not in editor) */}
-            <div className={(!generating && type === 'inpaint' && activeWorkspaceTab === 'editor') ? 'w-full h-full flex justify-center items-center' : 'hidden'}>
+            <div className={(!generating && type === 'inpaint' && activeWorkspaceTab === 'editor') ? 'w-full h-full flex flex-col justify-center items-center overflow-auto p-4' : 'hidden'}>
               <CanvasMaskEditor
                 imagePath={inputImagePath}
                 width={width}
