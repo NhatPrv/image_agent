@@ -1,5 +1,15 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react'
-import { Paintbrush, Eraser, Trash2, Undo, Upload, CheckCircle2 } from 'lucide-react'
+import {
+  Paintbrush,
+  Eraser,
+  Trash2,
+  Undo,
+  Upload,
+  CheckCircle2,
+  Maximize2,
+  Minimize2,
+  X
+} from 'lucide-react'
 
 interface CanvasMaskEditorProps {
   imagePath: string | null
@@ -19,11 +29,23 @@ export function CanvasMaskEditor({
   const [imageSrc, setImageSrc] = useState<string | null>(null)
   const [tool, setTool] = useState<'brush' | 'eraser'>('brush')
   const [brushSize, setBrushSize] = useState<number>(20)
+  const [isFullscreenModal, setIsFullscreenModal] = useState<boolean>(false)
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const isDrawingRef = useRef<boolean>(false)
   const historyRef = useRef<string[]>([]) // Store base64 snapshots for undo
   const [canUndo, setCanUndo] = useState(false)
+
+  // Listen for ESC key to close Fullscreen Mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' && isFullscreenModal) {
+        setIsFullscreenModal(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isFullscreenModal])
 
   // Trigger mask export
   const exportMask = useCallback((): void => {
@@ -223,8 +245,8 @@ export function CanvasMaskEditor({
     }
   }
 
-  return (
-    <div className="flex flex-col space-y-4 w-full items-center">
+  const content = (
+    <div className={`flex flex-col space-y-4 w-full items-center ${isFullscreenModal ? 'h-full justify-between' : ''}`}>
       {/* ─── Toolbar Row ─── */}
       <div className="flex items-center justify-between w-full bg-slate-950 border border-slate-900 rounded-xl p-3 flex-wrap gap-3">
         <div className="flex items-center space-x-1.5">
@@ -288,6 +310,20 @@ export function CanvasMaskEditor({
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
+
+              {/* Fullscreen Expand Tool */}
+              <button
+                type="button"
+                onClick={() => setIsFullscreenModal(!isFullscreenModal)}
+                className={`p-2 rounded-lg border transition ${
+                  isFullscreenModal
+                    ? 'bg-violet-600 border-violet-500 text-white'
+                    : 'bg-slate-900/50 border-slate-850 text-violet-400 hover:bg-violet-500/10'
+                }`}
+                title={isFullscreenModal ? 'Thu nhỏ giao diện' : 'Phóng to toàn màn hình để tô chi tiết'}
+              >
+                {isFullscreenModal ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              </button>
             </>
           )}
         </div>
@@ -301,18 +337,24 @@ export function CanvasMaskEditor({
             <input
               type="range"
               min="5"
-              max="60"
+              max={isFullscreenModal ? '120' : '80'}
               step="1"
               value={brushSize}
               onChange={(e) => setBrushSize(parseInt(e.target.value))}
-              className="accent-violet-500 h-1 w-24 bg-slate-800 rounded-lg cursor-pointer"
+              className="accent-violet-500 h-1 w-28 bg-slate-800 rounded-lg cursor-pointer"
             />
           </div>
         )}
       </div>
 
-      {/* ─── Canvas Workspace ─── */}
-      <div className="relative aspect-square max-h-[380px] w-full max-w-[380px] rounded-xl border border-slate-900 bg-slate-950 flex items-center justify-center overflow-hidden shadow-inner">
+      {/* ─── Canvas Workspace Container ─── */}
+      <div
+        className={`relative aspect-square w-full rounded-xl border border-slate-900 bg-slate-950 flex items-center justify-center overflow-hidden shadow-inner transition-all duration-300 ${
+          isFullscreenModal
+            ? 'max-h-[76vh] max-w-[76vh] border-violet-500/40 shadow-2xl shadow-violet-500/10'
+            : 'max-h-[520px] max-w-[520px]'
+        }`}
+      >
         {imagePath ? (
           <div className="relative w-full h-full">
             {/* Base Image under the drawing canvas */}
@@ -350,11 +392,55 @@ export function CanvasMaskEditor({
       </div>
 
       {imagePath && (
-        <div className="flex items-center space-x-2 text-[10px] text-emerald-400 font-semibold uppercase tracking-wider bg-emerald-500/5 px-3 py-1 rounded-full border border-emerald-500/10">
-          <CheckCircle2 className="h-3 w-3" />
-          <span>Mask Layer Connected & Ready</span>
+        <div className="flex items-center justify-between w-full text-[10px] text-slate-400">
+          <div className="flex items-center space-x-2 text-emerald-400 font-semibold uppercase tracking-wider bg-emerald-500/5 px-3 py-1 rounded-full border border-emerald-500/10">
+            <CheckCircle2 className="h-3 w-3" />
+            <span>Mask Layer Connected & Ready</span>
+          </div>
+          {isFullscreenModal && (
+            <span className="text-slate-500 italic">Nhấn ESC hoặc nút Thu nhỏ để quay lại giao diện chính</span>
+          )}
         </div>
       )}
     </div>
   )
+
+  if (isFullscreenModal) {
+    return (
+      <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-2xl flex flex-col items-center justify-between p-8 animate-in fade-in duration-200 overflow-hidden">
+        {/* Top Fullscreen Header */}
+        <div className="w-full max-w-5xl flex items-center justify-between border-b border-slate-900 pb-3 mb-2">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 rounded-lg bg-violet-600/20 border border-violet-500/30 text-violet-400">
+              <Maximize2 className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider">
+                BẢNG VẼ MẶT NẠ CHUYÊN SÂU (FULLSCREEN INPAINT EDITOR)
+              </h3>
+              <p className="text-[11px] text-slate-500">
+                Khung vẽ mở rộng hỗ trợ tô chi tiết cho ảnh nét cao. Nhấn ESC để đóng.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsFullscreenModal(false)}
+            className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition cursor-pointer"
+          >
+            <X className="h-4 w-4 text-rose-400" />
+            <span>Đóng / Hoàn tất</span>
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="w-full max-w-5xl flex-1 flex items-center justify-center overflow-hidden">
+          {content}
+        </div>
+      </div>
+    )
+  }
+
+  return content
 }
