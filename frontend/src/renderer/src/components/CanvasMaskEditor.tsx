@@ -8,7 +8,8 @@ import {
   CheckCircle2,
   Maximize2,
   Minimize2,
-  X
+  X,
+  RotateCcw
 } from 'lucide-react'
 
 interface CanvasMaskEditorProps {
@@ -31,60 +32,134 @@ export function CanvasMaskEditor({
   const [brushSize, setBrushSize] = useState<number>(20)
   const [isFullscreenModal, setIsFullscreenModal] = useState<boolean>(false)
 
+  // Natural image dimensions (e.g. 3840x2160)
+  const [naturalSize, setNaturalSize] = useState<{ width: number; height: number }>({
+    width: 512,
+    height: 512
+  })
+
+  // Fullscreen Pan & Zoom state
+  const [zoom, setZoom] = useState<number>(1.0)
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+  const [isPanning, setIsPanning] = useState<boolean>(false)
+  const [isSpacePressed, setIsSpacePressed] = useState<boolean>(false)
+  const panStartRef = useRef<{ x: number; y: number; panX: number; panY: number }>({
+    x: 0,
+    y: 0,
+    panX: 0,
+    panY: 0
+  })
+
+  const containerRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const isDrawingRef = useRef<boolean>(false)
+  const lastPosRef = useRef<{ x: number; y: number } | null>(null)
   const historyRef = useRef<string[]>([]) // Store base64 snapshots for undo
   const [canUndo, setCanUndo] = useState(false)
 
-  // Listen for ESC key to close Fullscreen Mode
+  // Listen for ESC key to close Fullscreen Mode & Spacebar for pan drag
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.key === 'Escape' && isFullscreenModal) {
         setIsFullscreenModal(false)
       }
+      if (e.code === 'Space' && !e.repeat && isFullscreenModal) {
+        setIsSpacePressed(true)
+      }
     }
+
+    const handleKeyUp = (e: KeyboardEvent): void => {
+      if (e.code === 'Space' && isFullscreenModal) {
+        setIsSpacePressed(false)
+      }
+    }
+
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+    }
   }, [isFullscreenModal])
+
+  // Reset zoom & pan when exiting fullscreen or changing image
+  useEffect(() => {
+    if (!isFullscreenModal) {
+      setZoom(1.0)
+      setPan({ x: 0, y: 0 })
+    }
+  }, [isFullscreenModal, imagePath])
+
+  // Calculate 100% exact canvas pixel coordinates (0 to naturalSize.width/height)
+  const getCanvasCoordinates = useCallback(
+    (clientX: number, clientY: number): { x: number; y: number } | null => {
+      const container = containerRef.current
+      if (!container || naturalSize.width === 0 || naturalSize.height === 0) return null
+
+      const rect = container.getBoundingClientRect()
+      const containerW = rect.width
+      const containerH = rect.height
+      if (containerW === 0 || containerH === 0) return null
+
+      // Object-contain scale factor inside container
+      const baseScale = Math.min(containerW / naturalSize.width, containerH / naturalSize.height)
+      const currentZoom = isFullscreenModal ? zoom : 1.0
+      const currentPan = isFullscreenModal ? pan : { x: 0, y: 0 }
+      const effectiveScale = baseScale * currentZoom
+
+      // Center of container
+      const containerCenterX = containerW / 2
+      const containerCenterY = containerH / 2
+
+      // Displayed image center (with pan offset)
+      const imageCenterX = containerCenterX + currentPan.x
+      const imageCenterY = containerCenterY + currentPan.y
+
+      // Top-left of rendered image inside container
+      const imageLeft = imageCenterX - (naturalSize.width * effectiveScale) / 2
+      const imageTop = imageCenterY - (naturalSize.height * effectiveScale) / 2
+
+      // Mouse relative to container top-left
+      const mouseX = clientX - rect.left
+      const mouseY = clientY - rect.top
+
+      // Map to actual canvas pixel (0 to naturalSize.width, 0 to naturalSize.height)
+      const canvasX = (mouseX - imageLeft) / effectiveScale
+      const canvasY = (mouseY - imageTop) / effectiveScale
+
+      return { x: canvasX, y: canvasY }
+    },
+    [naturalSize, zoom, pan, isFullscreenModal]
+  )
 
   // Trigger mask export
   const exportMask = useCallback((): void => {
     const canvas = canvasRef.current
     if (!canvas || !imagePath) return
 
-    // Create an offscreen canvas to export a black-and-white mask
-    // matching the desired width/height configured for generation.
+    const exportW = naturalSize.width > 0 ? naturalSize.width : width
+    const exportH = naturalSize.height > 0 ? naturalSize.height : height
+
     const exportCanvas = document.createElement('canvas')
-    exportCanvas.width = width
-    exportCanvas.height = height
+    exportCanvas.width = exportW
+    exportCanvas.height = exportH
     const exportCtx = exportCanvas.getContext('2d')
 
     if (exportCtx) {
-      // 1. Black background
       exportCtx.fillStyle = 'black'
-      exportCtx.fillRect(0, 0, width, height)
+      exportCtx.fillRect(0, 0, exportW, exportH)
+      exportCtx.drawImage(canvas, 0, 0, exportW, exportH)
 
-      // 2. Scale and draw the drawing canvas strokes as white
-      // Canvas is drawn overlaying the image, so we just draw the canvas content.
-      // But wait: we draw the mask as white. The transparent canvas currently has red drawings.
-      // To get a black and white mask, we can filter or draw using a composition or offscreen canvas.
-      // Easiest way: the transparent canvas only holds the mask drawings.
-      // We can draw the transparent canvas on the black export canvas, then convert any non-transparent
-      // pixels to white.
-      exportCtx.drawImage(canvas, 0, 0, width, height)
-
-      const imgData = exportCtx.getImageData(0, 0, width, height)
+      const imgData = exportCtx.getImageData(0, 0, exportW, exportH)
       const data = imgData.data
       for (let i = 0; i < data.length; i += 4) {
         const alpha = data[i + 3]
         if (alpha > 10) {
-          // If drawn (alpha > 10), convert pixel to solid white
-          data[i] = 255 // R
-          data[i + 1] = 255 // G
-          data[i + 2] = 255 // B
-          data[i + 3] = 255 // A
+          data[i] = 255
+          data[i + 1] = 255
+          data[i + 2] = 255
+          data[i + 3] = 255
         } else {
-          // Keep background solid black
           data[i] = 0
           data[i + 1] = 0
           data[i + 2] = 0
@@ -95,7 +170,7 @@ export function CanvasMaskEditor({
       const base64Mask = exportCanvas.toDataURL('image/png')
       onMaskChange(base64Mask)
     }
-  }, [imagePath, width, height, onMaskChange])
+  }, [imagePath, width, height, naturalSize, onMaskChange])
 
   // Handle select image click
   const handleSelectImage = async (): Promise<void> => {
@@ -103,7 +178,6 @@ export function CanvasMaskEditor({
       const selected = await window.api.selectImage()
       if (selected) {
         onImageSelected(selected)
-        // Reset canvas drawings
         clearCanvas()
         historyRef.current = []
         setCanUndo(false)
@@ -141,7 +215,6 @@ export function CanvasMaskEditor({
   const handleUndo = (): void => {
     const canvas = canvasRef.current
     if (!canvas || historyRef.current.length <= 1) return
-    // Remove current state
     historyRef.current.pop()
     const previousState = historyRef.current[historyRef.current.length - 1]
 
@@ -158,27 +231,32 @@ export function CanvasMaskEditor({
     setCanUndo(historyRef.current.length > 1)
   }
 
-  // Set up transparent drawing canvas parameters
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (canvas) {
-      canvas.width = 512
-      canvas.height = 512
-      const ctx = canvas.getContext('2d')
-      if (ctx) {
-        ctx.lineCap = 'round'
-        ctx.lineJoin = 'round'
-      }
-      // Save initial blank state
-      saveHistory()
-    }
-  }, [imagePath])
-
-  // Convert local imagePath to base64 data URL via IPC for webSecurity bypass
+  // Convert local imagePath to base64 data URL via IPC & set natural resolution
   useEffect(() => {
     if (imagePath) {
       window.api.readImageBase64(imagePath).then((base64) => {
         setImageSrc(base64)
+        if (base64) {
+          const img = new Image()
+          img.onload = (): void => {
+            const nw = img.naturalWidth || 512
+            const nh = img.naturalHeight || 512
+            setNaturalSize({ width: nw, height: nh })
+
+            const canvas = canvasRef.current
+            if (canvas) {
+              canvas.width = nw
+              canvas.height = nh
+              const ctx = canvas.getContext('2d')
+              if (ctx) {
+                ctx.lineCap = 'round'
+                ctx.lineJoin = 'round'
+              }
+              saveHistory()
+            }
+          }
+          img.src = base64
+        }
       })
     } else {
       setImageSrc(null)
@@ -192,62 +270,127 @@ export function CanvasMaskEditor({
     }
   }, [imagePath, exportMask])
 
-  // Mouse event listeners for canvas
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>): void => {
+  // Mouse wheel zoom centered at crosshair cursor location
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>): void => {
+    if (!isFullscreenModal) return
+    e.preventDefault()
+    const container = containerRef.current
+    if (!container) return
+    const rect = container.getBoundingClientRect()
+
+    // Cursor position relative to container center
+    const mouseX = e.clientX - rect.left - rect.width / 2
+    const mouseY = e.clientY - rect.top - rect.height / 2
+
+    const zoomFactor = e.deltaY < 0 ? 1.2 : 0.833
+    const newZoom = Math.min(Math.max(zoom * zoomFactor, 0.5), 10.0)
+
+    if (newZoom === zoom) return
+
+    // Keep point under crosshairs stationary while zooming
+    const scaleRatio = newZoom / zoom
+    const newPanX = mouseX - (mouseX - pan.x) * scaleRatio
+    const newPanY = mouseY - (mouseY - pan.y) * scaleRatio
+
+    setZoom(newZoom)
+    setPan({ x: newPanX, y: newPanY })
+  }
+
+  // Mouse Down for drawing or pan dragging
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>): void => {
+    // Right click (2) or middle click (1) or holding Space key triggers pan drag
+    if (e.button === 2 || e.button === 1 || isSpacePressed) {
+      setIsPanning(true)
+      panStartRef.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y }
+      return
+    }
+
+    if (e.button !== 0) return // Only left click draws
+
     const canvas = canvasRef.current
     if (!canvas) return
+    const coords = getCanvasCoordinates(e.clientX, e.clientY)
+    if (!coords) return
+
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const rect = canvas.getBoundingClientRect()
-    // Scale coords to match the internal 512x512 resolution of the canvas
-    const x = ((e.clientX - rect.left) / rect.width) * canvas.width
-    const y = ((e.clientY - rect.top) / rect.height) * canvas.height
-
     ctx.beginPath()
-    ctx.moveTo(x, y)
+    ctx.moveTo(coords.x, coords.y)
+    lastPosRef.current = { x: coords.x, y: coords.y }
     isDrawingRef.current = true
 
-    // Setup brush/eraser properties
-    ctx.lineWidth = brushSize
+    // Scaled brush size relative to natural image resolution
+    const scaleFactor = naturalSize.width > 0 ? naturalSize.width / 1000 : 1.0
+    const effectiveBrushSize = Math.max(2, brushSize * scaleFactor)
+
+    ctx.lineWidth = effectiveBrushSize
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+
     if (tool === 'eraser') {
       ctx.globalCompositeOperation = 'destination-out'
     } else {
       ctx.globalCompositeOperation = 'source-over'
-      ctx.strokeStyle = 'rgba(239, 68, 68, 0.6)' // semi-transparent red
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.65)' // semi-transparent red stroke
     }
 
-    // Draw single point
-    ctx.lineTo(x, y)
+    ctx.lineTo(coords.x, coords.y)
     ctx.stroke()
   }
 
-  const draw = (e: React.MouseEvent<HTMLCanvasElement>): void => {
+  // Mouse Move for drawing or pan dragging
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>): void => {
+    if (isPanning) {
+      const dx = e.clientX - panStartRef.current.x
+      const dy = e.clientY - panStartRef.current.y
+      setPan({
+        x: panStartRef.current.panX + dx,
+        y: panStartRef.current.panY + dy
+      })
+      return
+    }
+
     if (!isDrawingRef.current) return
     const canvas = canvasRef.current
     if (!canvas) return
+    const coords = getCanvasCoordinates(e.clientX, e.clientY)
+    if (!coords) return
+
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const rect = canvas.getBoundingClientRect()
-    const x = ((e.clientX - rect.left) / rect.width) * canvas.width
-    const y = ((e.clientY - rect.top) / rect.height) * canvas.height
-
-    ctx.lineTo(x, y)
-    ctx.stroke()
+    if (lastPosRef.current) {
+      ctx.beginPath()
+      ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y)
+      ctx.lineTo(coords.x, coords.y)
+      ctx.stroke()
+    }
+    lastPosRef.current = { x: coords.x, y: coords.y }
   }
 
-  const stopDrawing = (): void => {
+  // Mouse Up / Leave
+  const handleMouseUp = (): void => {
+    if (isPanning) {
+      setIsPanning(false)
+      return
+    }
+
     if (isDrawingRef.current) {
       isDrawingRef.current = false
+      lastPosRef.current = null
       saveHistory()
       exportMask()
     }
   }
 
   const content = (
-    <div className={`flex flex-col space-y-3 w-full items-center ${isFullscreenModal ? 'h-full justify-between' : ''}`}>
-      {/* ─── Toolbar Row (shrink-0 ensures it never overflows off top) ─── */}
+    <div
+      className={`flex flex-col space-y-3 w-full items-center ${
+        isFullscreenModal ? 'h-full justify-between' : ''
+      }`}
+    >
+      {/* ─── Toolbar Row ─── */}
       <div className="flex items-center justify-between w-full bg-slate-950 border border-slate-900 rounded-xl p-3 flex-wrap gap-3 shrink-0">
         <div className="flex items-center space-x-1.5">
           {/* Upload Button */}
@@ -328,35 +471,67 @@ export function CanvasMaskEditor({
           )}
         </div>
 
-        {/* Brush Size Slider */}
+        {/* Zoom Controls & Brush Size Slider */}
         {imagePath && (
-          <div className="flex items-center space-x-3 text-xs">
-            <span className="font-semibold text-slate-400 uppercase tracking-wider text-[10px]">
-              Brush Size: <span className="text-violet-400">{brushSize}px</span>
-            </span>
-            <input
-              type="range"
-              min="5"
-              max={isFullscreenModal ? '120' : '80'}
-              step="1"
-              value={brushSize}
-              onChange={(e) => setBrushSize(parseInt(e.target.value))}
-              className="accent-violet-500 h-1 w-28 bg-slate-800 rounded-lg cursor-pointer"
-            />
+          <div className="flex items-center space-x-4 text-xs">
+            {isFullscreenModal && (
+              <div className="flex items-center space-x-2 bg-slate-900 border border-slate-850 rounded-lg px-2.5 py-1 text-[11px]">
+                <span className="text-slate-400">Zoom:</span>
+                <span className="font-mono text-violet-400 font-bold">{Math.round(zoom * 100)}%</span>
+                {zoom !== 1.0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setZoom(1.0)
+                      setPan({ x: 0, y: 0 })
+                    }}
+                    className="text-[10px] text-slate-400 hover:text-slate-200 transition ml-1"
+                    title="Reset Zoom & Pan"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div className="flex items-center space-x-2">
+              <span className="font-semibold text-slate-400 uppercase tracking-wider text-[10px]">
+                Brush: <span className="text-violet-400">{brushSize}px</span>
+              </span>
+              <input
+                type="range"
+                min="2"
+                max={isFullscreenModal ? '120' : '80'}
+                step="1"
+                value={brushSize}
+                onChange={(e) => setBrushSize(parseInt(e.target.value))}
+                className="accent-violet-500 h-1 w-24 sm:w-28 bg-slate-800 rounded-lg cursor-pointer"
+              />
+            </div>
           </div>
         )}
       </div>
 
       {/* ─── Canvas Workspace Container ─── */}
       <div
+        ref={containerRef}
+        onWheel={handleWheel}
         className={`relative w-full rounded-xl border border-slate-900 bg-slate-950 flex items-center justify-center overflow-hidden shadow-inner transition-all duration-300 ${
           isFullscreenModal
-            ? 'aspect-square max-h-[76vh] max-w-[76vh] border-violet-500/40 shadow-2xl shadow-violet-500/10'
+            ? 'w-full h-full max-h-[82vh] border-violet-500/40 shadow-2xl shadow-violet-500/10 cursor-crosshair'
             : 'max-w-[720px] h-[360px] sm:h-[400px]'
         }`}
       >
         {imagePath ? (
-          <div className="relative w-full h-full">
+          <div
+            className="relative w-full h-full flex items-center justify-center pointer-events-auto"
+            style={{
+              transform: isFullscreenModal ? `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` : 'none',
+              transformOrigin: 'center center',
+              transition: isPanning ? 'none' : 'transform 0.05s ease-out'
+            }}
+            onContextMenu={(e) => e.preventDefault()}
+          >
             {/* Base Image under the drawing canvas */}
             <img
               src={imageSrc || ''}
@@ -367,11 +542,11 @@ export function CanvasMaskEditor({
             {/* Drawing Layer */}
             <canvas
               ref={canvasRef}
-              onMouseDown={startDrawing}
-              onMouseMove={draw}
-              onMouseUp={stopDrawing}
-              onMouseLeave={stopDrawing}
-              className="absolute inset-0 w-full h-full object-contain cursor-crosshair z-10 opacity-80"
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              className="absolute inset-0 w-full h-full object-contain cursor-crosshair z-10 opacity-85"
             />
           </div>
         ) : (
@@ -395,10 +570,14 @@ export function CanvasMaskEditor({
         <div className="flex items-center justify-between w-full text-[10px] text-slate-400 shrink-0">
           <div className="flex items-center space-x-2 text-emerald-400 font-semibold uppercase tracking-wider bg-emerald-500/5 px-3 py-1 rounded-full border border-emerald-500/10">
             <CheckCircle2 className="h-3 w-3" />
-            <span>Mask Layer Connected & Ready</span>
+            <span>
+              Mask Layer Ready ({naturalSize.width} × {naturalSize.height} px)
+            </span>
           </div>
           {isFullscreenModal && (
-            <span className="text-slate-500 italic">Nhấn ESC hoặc nút Thu nhỏ để quay lại giao diện chính</span>
+            <span className="text-slate-500 italic">
+              💡 Lăn chuột để Zoom theo tâm cọ | Giữ chuột phải hoặc phím Space để kéo ảnh | Nhấn ESC để đóng
+            </span>
           )}
         </div>
       )}
@@ -407,19 +586,19 @@ export function CanvasMaskEditor({
 
   if (isFullscreenModal) {
     return (
-      <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-2xl flex flex-col items-center justify-between p-8 animate-in fade-in duration-200 overflow-hidden">
+      <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-2xl flex flex-col items-center justify-between p-6 animate-in fade-in duration-200 overflow-hidden">
         {/* Top Fullscreen Header */}
-        <div className="w-full max-w-5xl flex items-center justify-between border-b border-slate-900 pb-3 mb-2">
+        <div className="w-full max-w-6xl flex items-center justify-between border-b border-slate-900 pb-3 mb-2 shrink-0">
           <div className="flex items-center space-x-3">
             <div className="p-2 rounded-lg bg-violet-600/20 border border-violet-500/30 text-violet-400">
               <Maximize2 className="h-4 w-4" />
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider">
-                BẢNG VẼ MẶT NẠ CHUYÊN SÂU (FULLSCREEN INPAINT EDITOR)
+                BẢNG VẼ MẶT NẠ TOÀN MÀN HÌNH (PIXEL-PERFECT INPAINT STUDIO)
               </h3>
               <p className="text-[11px] text-slate-500">
-                Khung vẽ mở rộng hỗ trợ tô chi tiết cho ảnh nét cao. Nhấn ESC để đóng.
+                Độ phân giải thực: {naturalSize.width} × {naturalSize.height} px | Cuộn chuột để Zoom theo tâm cọ
               </p>
             </div>
           </div>
@@ -430,12 +609,12 @@ export function CanvasMaskEditor({
             className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition cursor-pointer"
           >
             <X className="h-4 w-4 text-rose-400" />
-            <span>Đóng / Hoàn tất</span>
+            <span>Đóng / Hoàn tất (ESC)</span>
           </button>
         </div>
 
-        {/* Content */}
-        <div className="w-full max-w-5xl flex-1 flex items-center justify-center overflow-hidden">
+        {/* Content Container */}
+        <div className="w-full max-w-6xl flex-1 flex items-center justify-center overflow-hidden">
           {content}
         </div>
       </div>
