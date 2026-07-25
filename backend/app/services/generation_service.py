@@ -270,6 +270,8 @@ class GenerationService:
                 width, height = 512, 512
                 try:
                     with PILImage.open(img_path) as pil_img:
+                        from PIL import ImageOps
+                        pil_img = ImageOps.exif_transpose(pil_img)
                         width, height = pil_img.size
                 except Exception:
                     pass

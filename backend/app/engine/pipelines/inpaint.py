@@ -134,10 +134,13 @@ class InpaintPipeline(BaseDiffusionPipeline):
         try:
 
             def _load_images():
+                from PIL import ImageOps
                 with (
                     PILImage.open(params.input_image_path) as init_img,
                     PILImage.open(params.mask_image_path) as mask_img,
                 ):
+                    init_img = ImageOps.exif_transpose(init_img)
+                    mask_img = ImageOps.exif_transpose(mask_img)
                     orig_img = init_img.convert("RGB")
                     orig_w, orig_h = orig_img.size
 

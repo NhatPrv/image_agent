@@ -148,7 +148,9 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
         try:
 
             def _load_img():
+                from PIL import ImageOps
                 with PILImage.open(params.input_image_path) as img:
+                    img = ImageOps.exif_transpose(img)
                     # Convert to RGB and resize to match settings
                     return img.convert("RGB").resize((params.width, params.height))
 
@@ -187,7 +189,9 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
 
             # Configure grid for Tiled Img2Img
             tile_size = min(768, params.width, params.height)
+            tile_size = max(64, (tile_size // 8) * 8)
             overlap = min(96, tile_size // 8)
+            overlap = max(8, (overlap // 8) * 8)
 
             def get_grid_coords(total_size: int, tile_s: int, over: int) -> list[int]:
                 if total_size <= tile_s:

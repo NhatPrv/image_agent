@@ -151,11 +151,13 @@ export function GenerateView(): React.JSX.Element {
             if (img.naturalWidth > 0 && img.naturalHeight > 0) {
               setOriginalSize({ width: img.naturalWidth, height: img.naturalHeight })
               if (type === 'upscale') {
-                const targetW = Math.min(8192, Math.round(img.naturalWidth * scaleFactor))
-                const targetH = Math.min(8192, Math.round(img.naturalHeight * scaleFactor))
+                const targetW = Math.min(8192, Math.round((img.naturalWidth * scaleFactor) / 8) * 8)
+                const targetH = Math.min(8192, Math.round((img.naturalHeight * scaleFactor) / 8) * 8)
                 setParams({ width: targetW, height: targetH })
               } else if (type === 'inpaint') {
-                setParams({ width: img.naturalWidth, height: img.naturalHeight })
+                const targetW = Math.round(img.naturalWidth / 8) * 8
+                const targetH = Math.round(img.naturalHeight / 8) * 8
+                setParams({ width: targetW, height: targetH })
               }
             }
           }
@@ -170,8 +172,8 @@ export function GenerateView(): React.JSX.Element {
   // Sync upscale target parameters when type or scaleFactor changes
   useEffect(() => {
     if (type === 'upscale' && originalSize) {
-      const targetW = Math.min(8192, Math.round(originalSize.width * scaleFactor))
-      const targetH = Math.min(8192, Math.round(originalSize.height * scaleFactor))
+      const targetW = Math.min(8192, Math.round((originalSize.width * scaleFactor) / 8) * 8)
+      const targetH = Math.min(8192, Math.round((originalSize.height * scaleFactor) / 8) * 8)
       setParams({ width: targetW, height: targetH })
     }
   }, [type, scaleFactor, originalSize])
