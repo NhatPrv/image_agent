@@ -10,7 +10,7 @@ export interface GenerationParams {
   seed: number
   sampler: string
   model_id: string
-  type: 'txt2img' | 'img2img' | 'inpaint'
+  type: 'txt2img' | 'img2img' | 'inpaint' | 'upscale'
   input_image_path?: string
   mask_image_path?: string
   denoise_strength?: number
@@ -49,7 +49,7 @@ interface GenerationState {
   seed: number
   sampler: string
   modelId: string
-  type: 'txt2img' | 'img2img' | 'inpaint'
+  type: 'txt2img' | 'img2img' | 'inpaint' | 'upscale'
   inputImagePath: string | null
   maskImagePath: string | null
   denoiseStrength: number

@@ -141,6 +141,33 @@ class AIEngineManager(IAIEngine):
                     params, generation_id, progress_callback
                 )
                 dir_name = "inpaint"
+            elif params.type == GenerationType.UPSCALE:
+                # Share components from active pipelines if loaded to save time/VRAM
+                if self._img2img_pipeline is None:
+                    self._img2img_pipeline = Img2ImgPipeline(self._settings)
+                    has_txt2img = (
+                        self._txt2img_pipeline is not None
+                        and self._txt2img_pipeline.pipeline is not None
+                    )
+                    has_inpaint = (
+                        self._inpaint_pipeline is not None
+                        and self._inpaint_pipeline.pipeline is not None
+                    )
+                    if has_txt2img:
+                        self._img2img_pipeline.load_from_components(
+                            self._txt2img_pipeline.pipeline.components
+                        )
+                    elif has_inpaint:
+                        self._img2img_pipeline.load_from_components(
+                            self._inpaint_pipeline.pipeline.components
+                        )
+                    else:
+                        await self._img2img_pipeline.load(model_path)
+
+                pil_images = await self._img2img_pipeline.generate(
+                    params, generation_id, progress_callback
+                )
+                dir_name = "upscale"
             else:
                 msg = f"Generation type '{params.type}' not supported in this version."
                 raise EngineError(msg)

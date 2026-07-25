@@ -66,6 +66,8 @@ export function GenerateView(): React.JSX.Element {
   const [tempMaskBase64, setTempMaskBase64] = useState<string | null>(null)
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<'editor' | 'output'>('editor')
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [originalSize, setOriginalSize] = useState<{ width: number; height: number } | null>(null)
+  const [scaleFactor, setScaleFactor] = useState<number>(2.0)
 
   // Loop Generation States (Persisted in Zustand store)
   const loopEnabled = useGenerationStore((state) => state.loopEnabled)
@@ -139,22 +141,40 @@ export function GenerateView(): React.JSX.Element {
     }
   }, [history])
 
-  // In Inpaint mode, automatically lock width & height to the natural dimensions of the selected input image
+  // Load and read natural dimensions of the selected input image for Inpaint & Upscale modes
   useEffect(() => {
-    if (type === 'inpaint' && inputImagePath) {
+    if (inputImagePath) {
       window.api.readImageBase64(inputImagePath).then((base64) => {
         if (base64) {
           const img = new globalThis.Image()
           img.onload = () => {
             if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-              setParams({ width: img.naturalWidth, height: img.naturalHeight })
+              setOriginalSize({ width: img.naturalWidth, height: img.naturalHeight })
+              if (type === 'upscale') {
+                const targetW = Math.min(8192, Math.round(img.naturalWidth * scaleFactor))
+                const targetH = Math.min(8192, Math.round(img.naturalHeight * scaleFactor))
+                setParams({ width: targetW, height: targetH })
+              } else if (type === 'inpaint') {
+                setParams({ width: img.naturalWidth, height: img.naturalHeight })
+              }
             }
           }
           img.src = base64
         }
       })
+    } else {
+      setOriginalSize(null)
     }
-  }, [type, inputImagePath, setParams])
+  }, [inputImagePath, type])
+
+  // Sync upscale target parameters when type or scaleFactor changes
+  useEffect(() => {
+    if (type === 'upscale' && originalSize) {
+      const targetW = Math.min(8192, Math.round(originalSize.width * scaleFactor))
+      const targetH = Math.min(8192, Math.round(originalSize.height * scaleFactor))
+      setParams({ width: targetW, height: targetH })
+    }
+  }, [type, scaleFactor, originalSize])
 
   // Fetch models on component mount
   useEffect(() => {
@@ -247,7 +267,7 @@ export function GenerateView(): React.JSX.Element {
     let finalInputPath: string | undefined = undefined
     let finalMaskPath: string | undefined = undefined
 
-    if (type === 'img2img') {
+    if (type === 'img2img' || type === 'upscale') {
       if (!inputImagePath) {
         setErrorMsg('Please select an input image first.')
         return
@@ -442,9 +462,9 @@ export function GenerateView(): React.JSX.Element {
         </div>
 
         {/* Generation Mode Tabs */}
-        <div className="grid grid-cols-3 gap-1 bg-slate-900/50 p-1 rounded-xl border border-slate-900">
-          {(['txt2img', 'img2img', 'inpaint'] as const).map((m) => {
-            const labels = { txt2img: 'Text', img2img: 'Image', inpaint: 'Inpaint' }
+        <div className="grid grid-cols-4 gap-1 bg-slate-900/50 p-1 rounded-xl border border-slate-900">
+          {(['txt2img', 'img2img', 'inpaint', 'upscale'] as const).map((m) => {
+            const labels = { txt2img: 'Text', img2img: 'Image', inpaint: 'Inpaint', upscale: 'Upscale' }
             const active = type === m
             return (
               <button
@@ -487,226 +507,274 @@ export function GenerateView(): React.JSX.Element {
         </div>
 
         {/* LoRA Configuration Section */}
-        <div className="space-y-3 bg-slate-900/40 border border-slate-800/60 rounded-2xl p-4">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold text-slate-300 tracking-wider flex items-center gap-1.5">
-              🎨 LORA STYLES
-            </label>
-            <button
-              type="button"
-              disabled={generating}
-              onClick={() => {
-                const availableLoras = models.filter(m => m.component_type === 'lora');
-                const unusedLora = availableLoras.find(l => !activeLoras.some(al => al.modelId === l.id));
-                if (unusedLora) {
-                  setActiveLoras([...activeLoras, { modelId: unusedLora.id, weight: 1.0 }]);
-                } else if (availableLoras.length > 0) {
-                  setActiveLoras([...activeLoras, { modelId: availableLoras[0].id, weight: 1.0 }]);
-                }
-              }}
-              className="text-[10px] font-semibold text-violet-400 hover:text-violet-300 transition flex items-center gap-0.5"
-            >
-              + ADD LORA
-            </button>
-          </div>
-
-          {activeLoras.length === 0 ? (
-            <div className="text-[11px] text-slate-500 italic py-1.5 text-center bg-slate-950/30 border border-dashed border-slate-800/80 rounded-xl">
-              No LoRA models applied
+        {type !== 'upscale' && (
+          <div className="space-y-3 bg-slate-900/40 border border-slate-800/60 rounded-2xl p-4">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-300 tracking-wider flex items-center gap-1.5">
+                🎨 LORA STYLES
+              </label>
+              <button
+                type="button"
+                disabled={generating}
+                onClick={() => {
+                  const availableLoras = models.filter(m => m.component_type === 'lora');
+                  const unusedLora = availableLoras.find(l => !activeLoras.some(al => al.modelId === l.id));
+                  if (unusedLora) {
+                    setActiveLoras([...activeLoras, { modelId: unusedLora.id, weight: 1.0 }]);
+                  } else if (availableLoras.length > 0) {
+                    setActiveLoras([...activeLoras, { modelId: availableLoras[0].id, weight: 1.0 }]);
+                  }
+                }}
+                className="text-[10px] font-semibold text-violet-400 hover:text-violet-300 transition flex items-center gap-0.5"
+              >
+                + ADD LORA
+              </button>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {activeLoras.map((activeLora, idx) => {
-                const availableLoras = models.filter(m => m.component_type === 'lora');
-                return (
-                  <div key={idx} className="space-y-2 bg-slate-950/40 border border-slate-800/80 rounded-xl p-3 relative group">
-                    <button
-                      type="button"
-                      onClick={() => setActiveLoras(activeLoras.filter((_, i) => i !== idx))}
-                      className="absolute top-2 right-2 text-slate-500 hover:text-red-400 text-xs transition"
-                    >
-                      ×
-                    </button>
-                    
-                    <div className="space-y-1">
-                      <select
-                        value={activeLora.modelId}
-                        onChange={(e) => {
-                          const newLoras = [...activeLoras];
-                          newLoras[idx].modelId = e.target.value;
-                          setActiveLoras(newLoras);
-                        }}
-                        className="w-full bg-slate-900 border border-slate-850 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-violet-500/50"
+
+            {activeLoras.length === 0 ? (
+              <div className="text-[11px] text-slate-500 italic py-1.5 text-center bg-slate-950/30 border border-dashed border-slate-800/80 rounded-xl">
+                No LoRA models applied
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {activeLoras.map((activeLora, idx) => {
+                  const availableLoras = models.filter(m => m.component_type === 'lora');
+                  return (
+                    <div key={idx} className="space-y-2 bg-slate-950/40 border border-slate-800/80 rounded-xl p-3 relative group">
+                      <button
+                        type="button"
+                        onClick={() => setActiveLoras(activeLoras.filter((_, i) => i !== idx))}
+                        className="absolute top-2 right-2 text-slate-500 hover:text-red-400 text-xs transition"
                       >
-                        {availableLoras.map((lora) => (
-                          <option key={lora.id} value={lora.id}>
-                            {lora.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-[10px] text-slate-400">
-                        <span>Weight</span>
-                        <span className="font-mono text-violet-400 font-medium">
-                          {activeLora.weight.toFixed(2)}
-                        </span>
+                        ×
+                      </button>
+                      
+                      <div className="space-y-1">
+                        <select
+                          value={activeLora.modelId}
+                          onChange={(e) => {
+                            const newLoras = [...activeLoras];
+                            newLoras[idx].modelId = e.target.value;
+                            setActiveLoras(newLoras);
+                          }}
+                          className="w-full bg-slate-900 border border-slate-850 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-violet-500/50"
+                        >
+                          {availableLoras.map((lora) => (
+                            <option key={lora.id} value={lora.id}>
+                              {lora.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                      <input
-                        type="range"
-                        min="-2"
-                        max="2"
-                        step="0.05"
-                        value={activeLora.weight}
-                        onChange={(e) => {
-                          const newLoras = [...activeLoras];
-                          newLoras[idx].weight = parseFloat(e.target.value);
-                          setActiveLoras(newLoras);
-                        }}
-                        className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-violet-500"
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
 
-        {/* Aspect Ratio Config */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[10px] text-slate-400">
+                          <span>Weight</span>
+                          <span className="font-mono text-violet-400 font-medium">
+                            {activeLora.weight.toFixed(2)}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="-2"
+                          max="2"
+                          step="0.05"
+                          value={activeLora.weight}
+                          onChange={(e) => {
+                            const newLoras = [...activeLoras];
+                            newLoras[idx].weight = parseFloat(e.target.value);
+                            setActiveLoras(newLoras);
+                          }}
+                          className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-violet-500"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Aspect Ratio Config / Upscale Options */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <label className="text-xs font-semibold text-slate-400 tracking-wider">
-              IMAGE DIMENSIONS (UP TO 8K)
+              {type === 'upscale' ? 'UPSCALE SCALE FACTOR' : 'IMAGE DIMENSIONS (UP TO 8K)'}
             </label>
-            {type === 'inpaint' && (
+            {(type === 'inpaint' || type === 'upscale') && (
               <span className="text-[10px] font-bold text-amber-400 flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
                 <Lock className="h-3 w-3" />
-                <span>Locked for Inpaint</span>
+                <span>Locked for {type === 'inpaint' ? 'Inpaint' : 'Upscale'}</span>
               </span>
             )}
           </div>
 
-          {/* Preset Dropdown */}
-          <div className="space-y-1">
-            <select
-              value={
-                [
-                  '512x512',
-                  '512x768',
-                  '768x512',
-                  '720x1280',
-                  '1080x1920',
-                  '1080x2340',
-                  '768x1024',
-                  '1024x768',
-                  '1280x720',
-                  '1600x900',
-                  '1920x1080',
-                  '1920x1200',
-                  '2560x1440',
-                  '1440x2560',
-                  '2560x1600',
-                  '3440x1440',
-                  '2880x1800',
-                  '3000x2000',
-                  '3200x2000',
-                  '3840x2160',
-                  '2160x3840',
-                  '7680x4320',
-                  '4320x7680'
-                ].includes(`${width}x${height}`)
-                  ? `${width}x${height}`
-                  : 'custom'
-              }
-              onChange={(e) => {
-                const val = e.target.value
-                if (val !== 'custom') {
-                  const [w, h] = val.split('x').map(Number)
-                  setParams({ width: w, height: h })
-                }
-              }}
-              disabled={generating || type === 'inpaint'}
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-medium text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              <option value="custom">-- Custom Resolution --</option>
-              <optgroup label="Standard SD 1.5 Presets" className="bg-slate-950 text-slate-400">
-                <option value="512x512">Square (512x512 - 1:1)</option>
-                <option value="512x768">Portrait (512x768 - 2:3)</option>
-                <option value="768x512">Landscape (768x512 - 3:2)</option>
-              </optgroup>
-              <optgroup label="Mobile Devices (Portrait)" className="bg-slate-950 text-slate-400">
-                <option value="720x1280">Mobile HD (720x1280 - 9:16)</option>
-                <option value="1080x1920">Mobile FHD (1080x1920 - 9:16)</option>
-                <option value="1080x2340">Mobile Ultra (1080x2340 - 19.5:9)</option>
-              </optgroup>
-              <optgroup label="Tablet & iPad Devices" className="bg-slate-950 text-slate-400">
-                <option value="768x1024">Tablet Portrait (768x1024 - 3:4)</option>
-                <option value="1024x768">Tablet Landscape (1024x768 - 4:3)</option>
-              </optgroup>
-              <optgroup label="Desktop FHD Screen Presets" className="bg-slate-950 text-slate-400">
-                <option value="1280x720">Desktop HD (1280x720 - 16:9)</option>
-                <option value="1600x900">Desktop HD+ (1600x900 - 16:9)</option>
-                <option value="1920x1080">Desktop FHD (1920x1080 - 16:9)</option>
-                <option value="1920x1200">Desktop Wide (1920x1200 - 16:10)</option>
-              </optgroup>
-              <optgroup
-                label="Desktop 2K / 3K Screen Presets"
-                className="bg-slate-950 text-slate-400"
-              >
-                <option value="2560x1440">2K QHD Desktop (2560x1440 - 16:9)</option>
-                <option value="1440x2560">2K QHD Mobile (1440x2560 - 9:16)</option>
-                <option value="2560x1600">Laptop WQXGA / Legion 5 Pro (2560x1600 - 16:10)</option>
-                <option value="3440x1440">Ultrawide QHD (3440x1440 - 21:9)</option>
-                <option value="2880x1800">3K Retina Laptop (2880x1800 - 16:10)</option>
-                <option value="3000x2000">3K Surface / Display (3000x2000 - 3:2)</option>
-                <option value="3200x2000">3.2K Laptop Screen (3200x2000 - 16:10)</option>
-              </optgroup>
-              <optgroup label="UHD 4K / 8K Presets" className="bg-slate-950 text-slate-400">
-                <option value="3840x2160">UHD 4K Landscape (3840x2160)</option>
-                <option value="2160x3840">UHD 4K Portrait (2160x3840)</option>
-                <option value="7680x4320">UHD 8K Landscape (7680x4320)</option>
-                <option value="4320x7680">UHD 8K Portrait (4320x7680)</option>
-              </optgroup>
-            </select>
-          </div>
+          {type === 'upscale' ? (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <select
+                  value={scaleFactor}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value)
+                    setScaleFactor(val)
+                  }}
+                  disabled={generating}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-medium text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition cursor-pointer"
+                >
+                  <option value={1.5}>1.5x Upscale</option>
+                  <option value={2.0}>2.0x Upscale (Recommended)</option>
+                  <option value={3.0}>3.0x Upscale</option>
+                  <option value={4.0}>4.0x Upscale (8K Max)</option>
+                </select>
+              </div>
 
-          {/* Custom Width/Height inputs side-by-side */}
-          <div className="grid grid-cols-2 gap-3.5">
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold text-slate-500 uppercase">Width</span>
-              <input
-                type="number"
-                min="128"
-                max="8192"
-                step="8"
-                value={width}
-                disabled={generating || type === 'inpaint'}
-                onChange={(e) => {
-                  const val = parseInt(e.target.value) || 512
-                  setParams({ width: val })
-                }}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition disabled:opacity-60 disabled:cursor-not-allowed"
-              />
+              {/* Display calculated dimensions */}
+              {originalSize ? (
+                <div className="p-3 bg-slate-950/40 border border-slate-850 rounded-xl space-y-2">
+                  <div className="flex justify-between text-[11px] text-slate-400">
+                    <span>Original Dimensions:</span>
+                    <span className="font-semibold text-slate-300 font-mono">
+                      {originalSize.width} × {originalSize.height} px
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[11px] text-violet-400">
+                    <span>Upscaled Target ({scaleFactor}x):</span>
+                    <span className="font-bold text-violet-300 font-mono">
+                      {Math.min(8192, Math.round(originalSize.width * scaleFactor))} ×{' '}
+                      {Math.min(8192, Math.round(originalSize.height * scaleFactor))} px
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 bg-slate-950/20 border border-dashed border-slate-850 rounded-xl text-[10px] text-slate-500 text-center italic">
+                  Select an input image to view upscaled dimensions.
+                </div>
+              )}
             </div>
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold text-slate-500 uppercase">Height</span>
-              <input
-                type="number"
-                min="128"
-                max="8192"
-                step="8"
-                value={height}
-                disabled={generating || type === 'inpaint'}
-                onChange={(e) => {
-                  const val = parseInt(e.target.value) || 512
-                  setParams({ height: val })
-                }}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition disabled:opacity-60 disabled:cursor-not-allowed"
-              />
-            </div>
-          </div>
+          ) : (
+            <>
+              {/* Preset Dropdown */}
+              <div className="space-y-1">
+                <select
+                  value={
+                    [
+                      '512x512',
+                      '512x768',
+                      '768x512',
+                      '720x1280',
+                      '1080x1920',
+                      '1080x2340',
+                      '768x1024',
+                      '1024x768',
+                      '1280x720',
+                      '1600x900',
+                      '1920x1080',
+                      '1920x1200',
+                      '2560x1440',
+                      '1440x2560',
+                      '2560x1600',
+                      '3440x1440',
+                      '2880x1800',
+                      '3000x2000',
+                      '3200x2000',
+                      '3840x2160',
+                      '2160x3840',
+                      '7680x4320',
+                      '4320x7680'
+                    ].includes(`${width}x${height}`)
+                      ? `${width}x${height}`
+                      : 'custom'
+                  }
+                  onChange={(e) => {
+                    const val = e.target.value
+                    if (val !== 'custom') {
+                      const [w, h] = val.split('x').map(Number)
+                      setParams({ width: w, height: h })
+                    }
+                  }}
+                  disabled={generating || type === 'inpaint'}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-medium text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <option value="custom">-- Custom Resolution --</option>
+                  <optgroup label="Standard SD 1.5 Presets" className="bg-slate-950 text-slate-400">
+                    <option value="512x512">Square (512x512 - 1:1)</option>
+                    <option value="512x768">Portrait (512x768 - 2:3)</option>
+                    <option value="768x512">Landscape (768x512 - 3:2)</option>
+                  </optgroup>
+                  <optgroup label="Mobile Devices (Portrait)" className="bg-slate-950 text-slate-400">
+                    <option value="720x1280">Mobile HD (720x1280 - 9:16)</option>
+                    <option value="1080x1920">Mobile FHD (1080x1920 - 9:16)</option>
+                    <option value="1080x2340">Mobile Ultra (1080x2340 - 19.5:9)</option>
+                  </optgroup>
+                  <optgroup label="Tablet & iPad Devices" className="bg-slate-950 text-slate-400">
+                    <option value="768x1024">Tablet Portrait (768x1024 - 3:4)</option>
+                    <option value="1024x768">Tablet Landscape (1024x768 - 4:3)</option>
+                  </optgroup>
+                  <optgroup label="Desktop FHD Screen Presets" className="bg-slate-950 text-slate-400">
+                    <option value="1280x720">Desktop HD (1280x720 - 16:9)</option>
+                    <option value="1600x900">Desktop HD+ (1600x900 - 16:9)</option>
+                    <option value="1920x1080">Desktop FHD (1920x1080 - 16:9)</option>
+                    <option value="1920x1200">Desktop Wide (1920x1200 - 16:10)</option>
+                  </optgroup>
+                  <optgroup
+                    label="Desktop 2K / 3K Screen Presets"
+                    className="bg-slate-950 text-slate-400"
+                  >
+                    <option value="2560x1440">2K QHD Desktop (2560x1440 - 16:9)</option>
+                    <option value="1440x2560">2K QHD Mobile (1440x2560 - 9:16)</option>
+                    <option value="2560x1600">Laptop WQXGA / Legion 5 Pro (2560x1600 - 16:10)</option>
+                    <option value="3440x1440">Ultrawide QHD (3440x1440 - 21:9)</option>
+                    <option value="2880x1800">3K Retina Laptop (2880x1800 - 16:10)</option>
+                    <option value="3000x2000">3K Surface / Display (3000x2000 - 3:2)</option>
+                    <option value="3200x2000">3.2K Laptop Screen (3200x2000 - 16:10)</option>
+                  </optgroup>
+                  <optgroup label="UHD 4K / 8K Presets" className="bg-slate-950 text-slate-400">
+                    <option value="3840x2160">UHD 4K Landscape (3840x2160)</option>
+                    <option value="2160x3840">UHD 4K Portrait (2160x3840)</option>
+                    <option value="7680x4320">UHD 8K Landscape (7680x4320)</option>
+                    <option value="4320x7680">UHD 8K Portrait (4320x7680)</option>
+                  </optgroup>
+                </select>
+              </div>
+
+              {/* Custom Width/Height inputs side-by-side */}
+              <div className="grid grid-cols-2 gap-3.5">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">Width</span>
+                  <input
+                    type="number"
+                    min="128"
+                    max="8192"
+                    step="8"
+                    value={width}
+                    disabled={generating || type === 'inpaint'}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 512
+                      setParams({ width: val })
+                    }}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">Height</span>
+                  <input
+                    type="number"
+                    min="128"
+                    max="8192"
+                    step="8"
+                    value={height}
+                    disabled={generating || type === 'inpaint'}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 512
+                      setParams({ height: val })
+                    }}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                  />
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Inpaint Lock Notice */}
           {type === 'inpaint' && (
@@ -721,14 +789,14 @@ export function GenerateView(): React.JSX.Element {
           )}
 
           {/* VRAM Warning for high resolutions */}
-          {type !== 'inpaint' && (width > 2048 || height > 2048) ? (
+          {type !== 'inpaint' && type !== 'upscale' && (width > 2048 || height > 2048) ? (
             <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-[10px] leading-relaxed text-rose-400 font-medium">
               🚨 <strong>CRITICAL OOM RISK (4K/8K):</strong> Generating at resolutions above 2K
               requires substantial GPU VRAM. Ensure both <strong>Model CPU Offloading</strong> and{' '}
               <strong>VAE Tiling</strong> are enabled in Settings to prevent OOM crashes.
             </div>
           ) : (
-            type !== 'inpaint' && (width > 1024 || height > 1024) && (
+            type !== 'inpaint' && type !== 'upscale' && (width > 1024 || height > 1024) && (
               <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] leading-relaxed text-amber-400 font-medium">
                 ⚠️ <strong>High Resolution Warning:</strong> Generating at FHD speeds requires more
                 VRAM. Make sure VRAM optimizations are enabled if you run into OOM errors.
@@ -738,109 +806,119 @@ export function GenerateView(): React.JSX.Element {
         </div>
 
         {/* Sampling Steps Slider */}
-        <div className="space-y-2">
-          <div className="flex justify-between text-xs font-semibold text-slate-400">
-            <span>SAMPLING STEPS</span>
-            <span className="text-violet-400">{steps}</span>
-          </div>
-          <input
-            type="range"
-            min="5"
-            max="100"
-            step="1"
-            value={steps}
-            disabled={generating}
-            onChange={(e) => setParams({ steps: parseInt(e.target.value) })}
-            className="w-full accent-violet-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
-          />
-        </div>
-
-        {/* CFG Scale Slider */}
-        <div className="space-y-2">
-          <div className="flex justify-between text-xs font-semibold text-slate-400">
-            <span>CFG SCALE</span>
-            <span className="text-violet-400">{cfgScale.toFixed(1)}</span>
-          </div>
-          <input
-            type="range"
-            min="1"
-            max="20"
-            step="0.5"
-            value={cfgScale}
-            disabled={generating}
-            onChange={(e) => setParams({ cfgScale: parseFloat(e.target.value) })}
-            className="w-full accent-violet-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
-          />
-        </div>
-
-        {/* Sampler Selector */}
-        <div className="space-y-2">
-          <label className="text-xs font-semibold text-slate-400 tracking-wider">
-            SAMPLER METHOD
-          </label>
-          <select
-            value={sampler}
-            disabled={generating}
-            onChange={(e) => setParams({ sampler: e.target.value })}
-            className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-medium text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition cursor-pointer"
-          >
-            {samplers.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Custom Seed Field */}
-        <div className="space-y-2">
-          <label className="text-xs font-semibold text-slate-400 tracking-wider">
-            CUSTOM SEED (-1 for Random)
-          </label>
-          <input
-            type="number"
-            value={seed}
-            disabled={generating}
-            onChange={(e) => setParams({ seed: parseInt(e.target.value) })}
-            className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition"
-          />
-        </div>
-
-        {/* Loop Generation Settings */}
-        <div className="space-y-3 border-t border-slate-900 pt-4">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-slate-400 tracking-wider">
-              LOOP GENERATION
-            </label>
+        {type !== 'upscale' && (
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs font-semibold text-slate-400">
+              <span>SAMPLING STEPS</span>
+              <span className="text-violet-400">{steps}</span>
+            </div>
             <input
-              type="checkbox"
-              checked={loopEnabled}
-              disabled={isLoopRunning.current}
-              onChange={(e) => setLoopEnabled(e.target.checked)}
-              className="accent-violet-500 h-4 w-4 rounded border-slate-800 bg-slate-900 cursor-pointer"
+              type="range"
+              min="5"
+              max="100"
+              step="1"
+              value={steps}
+              disabled={generating}
+              onChange={(e) => setParams({ steps: parseInt(e.target.value) })}
+              className="w-full accent-violet-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
             />
           </div>
-          {loopEnabled && (
-            <div className="space-y-1.5 animate-fade-in">
-              <span className="text-[10px] font-bold text-slate-500 uppercase">
-                Number of Loops (Enter &lt; 1 for Infinite)
-              </span>
+        )}
+
+        {/* CFG Scale Slider */}
+        {type !== 'upscale' && (
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs font-semibold text-slate-400">
+              <span>CFG SCALE</span>
+              <span className="text-violet-400">{cfgScale.toFixed(1)}</span>
+            </div>
+            <input
+              type="range"
+              min="1"
+              max="20"
+              step="0.5"
+              value={cfgScale}
+              disabled={generating}
+              onChange={(e) => setParams({ cfgScale: parseFloat(e.target.value) })}
+              className="w-full accent-violet-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
+            />
+          </div>
+        )}
+
+        {/* Sampler Selector */}
+        {type !== 'upscale' && (
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-slate-400 tracking-wider">
+              SAMPLER METHOD
+            </label>
+            <select
+              value={sampler}
+              disabled={generating}
+              onChange={(e) => setParams({ sampler: e.target.value })}
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-medium text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition cursor-pointer"
+            >
+              {samplers.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Custom Seed Field */}
+        {type !== 'upscale' && (
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-slate-400 tracking-wider">
+              CUSTOM SEED (-1 for Random)
+            </label>
+            <input
+              type="number"
+              value={seed}
+              disabled={generating}
+              onChange={(e) => setParams({ seed: parseInt(e.target.value) })}
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition"
+            />
+          </div>
+        )}
+
+        {/* Loop Generation Settings */}
+        {type !== 'upscale' && (
+          <div className="space-y-3 border-t border-slate-900 pt-4">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-400 tracking-wider">
+                LOOP GENERATION
+              </label>
               <input
-                type="number"
-                value={loopCount}
+                type="checkbox"
+                checked={loopEnabled}
                 disabled={isLoopRunning.current}
-                onChange={(e) => {
-                  const val = parseInt(e.target.value)
-                  setLoopCount(isNaN(val) ? 1 : val)
-                }}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition"
+                onChange={(e) => setLoopEnabled(e.target.checked)}
+                className="accent-violet-500 h-4 w-4 rounded border-slate-800 bg-slate-900 cursor-pointer"
               />
             </div>
-          )}
-        </div>
+            {loopEnabled && (
+              <div className="space-y-1.5 animate-fade-in">
+                <span className="text-[10px] font-bold text-slate-500 uppercase">
+                  Number of Loops (Enter &lt; 1 for Infinite)
+                </span>
+                <input
+                  type="number"
+                  value={loopCount}
+                  disabled={isLoopRunning.current}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value)
+                    setLoopCount(isNaN(val) ? 1 : val)
+                  }}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500/50 transition"
+                />
+              </div>
+            )}
+          </div>
+        )}
 
-        {/* Image to Image settings */}
-        {type === 'img2img' && (
+        {/* Image to Image / Upscale settings */}
+        {(type === 'img2img' || type === 'upscale') && (
           <div className="space-y-4 border-t border-slate-900 pt-4">
             <div className="space-y-2">
               <label className="text-xs font-semibold text-slate-400 tracking-wider">
@@ -877,22 +955,24 @@ export function GenerateView(): React.JSX.Element {
               )}
             </div>
 
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs font-semibold text-slate-400">
-                <span>DENOISING STRENGTH</span>
-                <span className="text-violet-400">{denoiseStrength.toFixed(2)}</span>
+            {type === 'img2img' && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs font-semibold text-slate-400">
+                  <span>DENOISING STRENGTH</span>
+                  <span className="text-violet-400">{denoiseStrength.toFixed(2)}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.05"
+                  max="1.0"
+                  step="0.05"
+                  value={denoiseStrength}
+                  disabled={generating}
+                  onChange={(e) => setParams({ denoiseStrength: parseFloat(e.target.value) })}
+                  className="w-full accent-violet-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                />
               </div>
-              <input
-                type="range"
-                min="0.05"
-                max="1.0"
-                step="0.05"
-                value={denoiseStrength}
-                disabled={generating}
-                onChange={(e) => setParams({ denoiseStrength: parseFloat(e.target.value) })}
-                className="w-full accent-violet-500 h-1 bg-slate-800 rounded-lg cursor-pointer"
-              />
-            </div>
+            )}
           </div>
         )}
 
@@ -924,48 +1004,50 @@ export function GenerateView(): React.JSX.Element {
         {/* ─── Center Prompt & Preview Panel ─── */}
         <div className="flex-1 flex flex-col p-8 overflow-hidden justify-between space-y-6">
           {/* Prompts Input Section */}
-          <div className="space-y-4 flex-shrink-0">
-            {/* Positive Prompt */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs font-semibold text-slate-400">
-                <div className="flex items-center space-x-2">
-                  <Sparkles className="h-3.5 w-3.5 text-violet-400" />
-                  <span>POSITIVE PROMPT</span>
+          {type !== 'upscale' && (
+            <div className="space-y-4 flex-shrink-0">
+              {/* Positive Prompt */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs font-semibold text-slate-400">
+                  <div className="flex items-center space-x-2">
+                    <Sparkles className="h-3.5 w-3.5 text-violet-400" />
+                    <span>POSITIVE PROMPT</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleOptimizePrompt}
+                    disabled={generating || optimizingPrompt || !prompt.trim()}
+                    className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-violet-600/10 border border-violet-500/20 text-[10px] font-bold text-violet-400 hover:bg-violet-600/20 hover:text-violet-300 disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer"
+                  >
+                    <Wand2 className={`h-3 w-3 ${optimizingPrompt ? 'animate-pulse' : ''}`} />
+                    <span>{optimizingPrompt ? 'OPTIMIZING...' : 'ENHANCE VIA OLLAMA'}</span>
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleOptimizePrompt}
-                  disabled={generating || optimizingPrompt || !prompt.trim()}
-                  className="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-violet-600/10 border border-violet-500/20 text-[10px] font-bold text-violet-400 hover:bg-violet-600/20 hover:text-violet-300 disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer"
-                >
-                  <Wand2 className={`h-3 w-3 ${optimizingPrompt ? 'animate-pulse' : ''}`} />
-                  <span>{optimizingPrompt ? 'OPTIMIZING...' : 'ENHANCE VIA OLLAMA'}</span>
-                </button>
+                <textarea
+                  value={prompt}
+                  disabled={generating}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="Describe your creative vision in details..."
+                  className="w-full h-24 bg-slate-900 border border-slate-850 rounded-xl p-4 text-sm font-medium text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-violet-500/30 transition resize-none"
+                />
               </div>
-              <textarea
-                value={prompt}
-                disabled={generating}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Describe your creative vision in details..."
-                className="w-full h-24 bg-slate-900 border border-slate-850 rounded-xl p-4 text-sm font-medium text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-violet-500/30 transition resize-none"
-              />
-            </div>
 
-            {/* Negative Prompt */}
-            <div className="space-y-1.5">
-              <span className="text-xs font-semibold text-slate-400 tracking-wider">
-                NEGATIVE PROMPT
-              </span>
-              <input
-                type="text"
-                value={negativePrompt}
-                disabled={generating}
-                onChange={(e) => setNegativePrompt(e.target.value)}
-                placeholder="What to exclude from the generated image..."
-                className="w-full bg-slate-900 border border-slate-850 rounded-xl px-4 py-2.5 text-xs font-medium text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-violet-500/30 transition"
-              />
+              {/* Negative Prompt */}
+              <div className="space-y-1.5">
+                <span className="text-xs font-semibold text-slate-400 tracking-wider">
+                  NEGATIVE PROMPT
+                </span>
+                <input
+                  type="text"
+                  value={negativePrompt}
+                  disabled={generating}
+                  onChange={(e) => setNegativePrompt(e.target.value)}
+                  placeholder="What to exclude from the generated image..."
+                  className="w-full bg-slate-900 border border-slate-850 rounded-xl px-4 py-2.5 text-xs font-medium text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-violet-500/30 transition"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Center Workspace (Image Preview Box) */}
           <div className="flex-1 border border-slate-900 rounded-2xl bg-slate-900/10 flex items-center justify-center p-6 overflow-hidden relative">
@@ -1087,10 +1169,13 @@ export function GenerateView(): React.JSX.Element {
                   <Image className="h-6 w-6 text-slate-600" />
                 </div>
                 <div className="space-y-1">
-                  <h4 className="text-sm font-semibold text-slate-400">Workspace is empty</h4>
+                  <h4 className="text-sm font-semibold text-slate-400">
+                    {type === 'upscale' ? 'Ready to Upscale' : 'Workspace is empty'}
+                  </h4>
                   <p className="text-xs text-slate-500 max-w-xs leading-normal">
-                    Configure parameters on the left and enter your prompt to generate your local AI
-                    image.
+                    {type === 'upscale'
+                      ? 'Select an input image, choose your scale factor on the left panel, and click Generate to upscale.'
+                      : 'Configure parameters on the left and enter your prompt to generate your local AI image.'}
                   </p>
                 </div>
               </div>

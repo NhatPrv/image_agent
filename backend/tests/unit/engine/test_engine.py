@@ -7,7 +7,7 @@ SchedulerFactory, and VRAMManager.
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
 from diffusers import DPMSolverMultistepScheduler, EulerAncestralDiscreteScheduler
@@ -140,3 +140,73 @@ def test_apply_loras_on_pipeline():
     mock_pipe.load_lora_weights.assert_any_call(expected_dir, weight_name="lora2.safetensors", adapter_name="adapter_1")
 
     mock_pipe.set_adapters.assert_called_once_with(["adapter_0", "adapter_1"], adapter_weights=[0.75, 0.5])
+
+
+@pytest.mark.asyncio
+@patch("app.engine.engine_manager.Img2ImgPipeline")
+async def test_engine_manager_upscale_dispatch(mock_img2img_class):
+    """Verify EngineManager correctly dispatches GenerationType.UPSCALE requests to Img2ImgPipeline."""
+    from app.engine.engine_manager import AIEngineManager
+    from app.core.entities.generation import GenerationParams
+    from app.core.enums.generation_type import GenerationType
+    from app.core.entities.model_info import ModelInfo
+    from PIL import Image
+
+    # Mock settings, event_bus, storage
+    settings = Settings()
+    event_bus = AsyncMock()
+    storage = AsyncMock()
+    # Mock storage saving to return a path
+    storage.save_image = AsyncMock(return_value="path/to/upscaled.png")
+
+    manager = AIEngineManager(settings, event_bus, storage)
+
+    # Set active model
+    mock_model = ModelInfo(
+        id="model_123",
+        name="Dreamshaper",
+        filename="dreamshaper.safetensors",
+        path="C:/models/checkpoints/dreamshaper.safetensors",
+        component_type=ModelComponentType.CHECKPOINT,
+        architecture=ModelArchitecture.SD_1_5,
+        file_format=ModelFileFormat.SAFETENSORS,
+        size_bytes=2147483648,
+        hash_sha256="hash",
+    )
+    manager._active_model_info = mock_model
+
+    # Mock img2img pipeline instance
+    mock_pipeline_inst = MagicMock()
+    mock_pipeline_inst.load = AsyncMock()
+    mock_img2img_class.return_value = mock_pipeline_inst
+    
+    # Return a PIL Image when generating
+    mock_image = Image.new("RGB", (1024, 1024))
+    mock_pipeline_inst.generate = AsyncMock(return_value=[mock_image])
+
+    # Parameters for upscale
+    params = GenerationParams(
+        prompt="masterpiece",
+        negative_prompt="",
+        width=1024,
+        height=1024,
+        steps=25,
+        cfg_scale=7.0,
+        seed=-1,
+        sampler=SchedulerType.EULER_A,
+        model_id="model_123",
+        type=GenerationType.UPSCALE,
+        input_image_path="path/to/input.png",
+        denoise_strength=0.25,
+    )
+
+    params.extra["generation_id"] = "gen_123"
+    await manager.generate(params, None)
+
+    # Assertions
+    # 1. Pipeline instance is created
+    mock_img2img_class.assert_called_once_with(settings)
+    # 2. generate was called on pipeline wrapper
+    mock_pipeline_inst.generate.assert_called_once_with(params, "gen_123", None)
+    # 3. Storage was called to save the output image
+    storage.save_image.assert_called_once()

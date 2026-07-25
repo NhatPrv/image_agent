@@ -15,6 +15,7 @@ import torch
 from diffusers import StableDiffusionImg2ImgPipeline, StableDiffusionXLImg2ImgPipeline
 from PIL import Image as PILImage
 
+from app.core.enums.generation_type import GenerationType
 from app.core.exceptions.base import GenerationError
 from app.engine.pipelines.base import BaseDiffusionPipeline
 from app.engine.pipelines.txt2img import is_sdxl_checkpoint
@@ -129,6 +130,19 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
             msg = "Input image path is required for Image-to-Image generation."
             raise GenerationError(msg)
 
+        # Resolve prompt, negative_prompt, and denoise_strength
+        # (Allows UPSCALE mode or missing values to use high-quality defaults)
+        is_upscale = params.type == GenerationType.UPSCALE
+        prompt = params.prompt
+        if not prompt or prompt == "masterpiece":
+            prompt = "masterpiece, high quality, sharp focus, extremely detailed texture, photorealistic, 8k resolution, clear details"
+
+        negative_prompt = params.negative_prompt
+        if not negative_prompt:
+            negative_prompt = "blurry, low quality, noise, out of focus, deformed, ugly, pixelated, raw photo"
+
+        denoise_strength = 0.25 if is_upscale else params.denoise_strength
+
         # ─── 1. Load and process input image ───
         loop = asyncio.get_running_loop()
         try:
@@ -207,8 +221,8 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
             # ─── 5. Inference execution (Tiled) ───
             logger.info(
                 "Executing Tiled Image-to-Image | Prompt: '%s' | Strength: %.2f | Size: %dx%d (Tiles: %d)",
-                params.prompt,
-                params.denoise_strength,
+                prompt,
+                denoise_strength,
                 params.width,
                 params.height,
                 total_tiles,
@@ -271,10 +285,10 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
 
                             # Denoise tile
                             output = self.pipeline(
-                                prompt=params.prompt,
-                                negative_prompt=params.negative_prompt,
+                                prompt=prompt,
+                                negative_prompt=negative_prompt,
                                 image=tile_img,
-                                strength=params.denoise_strength,
+                                strength=denoise_strength,
                                 num_inference_steps=params.steps,
                                 guidance_scale=params.cfg_scale,
                                 generator=generator,
@@ -335,8 +349,8 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
             # ─── 5. Inference execution (Standard) ───
             logger.info(
                 "Executing Standard Image-to-Image | Prompt: '%s' | Strength: %.2f | Size: %dx%d",
-                params.prompt,
-                params.denoise_strength,
+                prompt,
+                denoise_strength,
                 params.width,
                 params.height,
             )
@@ -345,10 +359,10 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
 
                 def _run_inference():
                     output = self.pipeline(
-                        prompt=params.prompt,
-                        negative_prompt=params.negative_prompt,
+                        prompt=prompt,
+                        negative_prompt=negative_prompt,
                         image=input_image,
-                        strength=params.denoise_strength,
+                        strength=denoise_strength,
                         num_inference_steps=params.steps,
                         guidance_scale=params.cfg_scale,
                         generator=generator,

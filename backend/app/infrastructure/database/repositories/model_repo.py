@@ -111,6 +111,18 @@ class SQLAlchemyModelRepository(BaseRepository[AIModelRecord], IModelRepository)
         result = await self._session.execute(select(AIModelRecord))
         return [self._to_entity(row) for row in result.scalars().all()]
 
+    async def delete(self, entity_id: str) -> None:
+        """Delete a record matching the primary key."""
+        result = await self._session.execute(
+            select(AIModelRecord).where(AIModelRecord.id == entity_id)
+        )
+        db_model = result.scalar_one_or_none()
+        if db_model is not None:
+            await self._session.delete(db_model)
+            await self._session.flush()
+        else:
+            logger.warning("Attempted to delete non-existent AIModelRecord: %s", entity_id)
+
     def _to_entity(self, db_model: AIModelRecord) -> ModelInfo:
         """Map ORM AIModelRecord to domain ModelInfo."""
         trigger_words = []

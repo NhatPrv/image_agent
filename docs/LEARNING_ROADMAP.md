@@ -2,7 +2,7 @@
 ## DỰ ÁN IMAGE AGENT (DESKTOP ARTIFICIAL INTELLIGENCE APP)
 
 Tài liệu này được thiết kế để cung cấp toàn bộ các kiến thức từ cơ bản (con số 0) đến chuyên sâu giúp bạn đọc, hiểu, bảo trì và phát triển toàn diện dự án **Image Agent**. Lộ trình được chia theo các cấp độ kiến thức nền tảng và tương ứng cụ thể theo từng Phase phát triển của dự án.
-
+    
 ---
 
 ## 📌 PHẦN 1: KIẾN THỨC NỀN TẢNG CƠ BẢN (LEVEL 0)

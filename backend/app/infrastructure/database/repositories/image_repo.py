@@ -96,6 +96,18 @@ class SQLAlchemyImageRepository(BaseRepository[ImageModel], IImageRepository):
 
         return records, total_count
 
+    async def delete(self, entity_id: str) -> None:
+        """Delete a record matching the primary key."""
+        result = await self._session.execute(
+            select(ImageModel).where(ImageModel.id == entity_id)
+        )
+        db_model = result.scalar_one_or_none()
+        if db_model is not None:
+            await self._session.delete(db_model)
+            await self._session.flush()
+        else:
+            logger.warning("Attempted to delete non-existent ImageModel: %s", entity_id)
+
     def _to_entity(self, db_model: ImageModel) -> ImageRecord:
         """Map ORM ImageModel to domain ImageRecord."""
         tags = []
