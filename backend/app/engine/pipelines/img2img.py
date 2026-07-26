@@ -313,10 +313,6 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
                                     progress_callback(progress_data)
                                 return callback_kwargs
 
-                            # Old style callback bridge for backwards compatibility
-                            def _old_local_callback(step: int, timestep: int, latents: torch.FloatTensor, current_t_idx=t_idx):
-                                _local_callback(None, step, timestep, {}, current_t_idx)
-
                             # Denoise tile
                             output = self.pipeline(
                                 prompt=prompt,
@@ -329,8 +325,6 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
                                 num_images_per_prompt=params.batch_size,
                                 callback_on_step_end=_local_callback,
                                 callback_on_step_end_tensor_inputs=["latents"],
-                                callback=_old_local_callback,
-                                callback_steps=1,
                             )
 
                             output_tile = np.array(output.images[0]).astype(np.float32) / 255.0
@@ -395,10 +389,6 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
                     progress_callback(progress_data)
                 return callback_kwargs
 
-            # Old style callback bridge for backwards compatibility
-            def _old_callback(step: int, timestep: int, latents: torch.FloatTensor):
-                _step_callback(None, step, timestep, {})
-
             # ─── 5. Inference execution (Standard) ───
             logger.info(
                 "Executing Standard Image-to-Image | Prompt: '%s' | Strength: %.2f | Size: %dx%d (Steps: %d)",
@@ -423,8 +413,6 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
                         num_images_per_prompt=params.batch_size,
                         callback_on_step_end=_step_callback,
                         callback_on_step_end_tensor_inputs=["latents"],
-                        callback=_old_callback,
-                        callback_steps=1,
                     )
                     return output.images
 
