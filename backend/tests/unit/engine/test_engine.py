@@ -143,9 +143,9 @@ def test_apply_loras_on_pipeline():
 
 
 @pytest.mark.asyncio
-@patch("app.engine.engine_manager.Img2ImgPipeline")
-async def test_engine_manager_upscale_dispatch(mock_img2img_class):
-    """Verify EngineManager correctly dispatches GenerationType.UPSCALE requests to Img2ImgPipeline."""
+@patch("app.engine.engine_manager.SuperResolutionPipeline")
+async def test_engine_manager_upscale_dispatch(mock_superres_class):
+    """Verify EngineManager correctly dispatches GenerationType.UPSCALE requests to SuperResolutionPipeline."""
     from app.engine.engine_manager import AIEngineManager
     from app.core.entities.generation import GenerationParams
     from app.core.enums.generation_type import GenerationType
@@ -158,6 +158,15 @@ async def test_engine_manager_upscale_dispatch(mock_img2img_class):
     storage = AsyncMock()
     # Mock storage saving to return a path
     storage.save_image = AsyncMock(return_value="path/to/upscaled.png")
+
+    # Mock superres pipeline instance before manager initialization
+    mock_pipeline_inst = MagicMock()
+    mock_pipeline_inst.load = AsyncMock()
+    mock_superres_class.return_value = mock_pipeline_inst
+    
+    # Return a PIL Image when generating
+    mock_image = Image.new("RGB", (1024, 1024))
+    mock_pipeline_inst.generate = AsyncMock(return_value=[mock_image])
 
     manager = AIEngineManager(settings, event_bus, storage)
 
@@ -174,15 +183,6 @@ async def test_engine_manager_upscale_dispatch(mock_img2img_class):
         hash_sha256="hash",
     )
     manager._active_model_info = mock_model
-
-    # Mock img2img pipeline instance
-    mock_pipeline_inst = MagicMock()
-    mock_pipeline_inst.load = AsyncMock()
-    mock_img2img_class.return_value = mock_pipeline_inst
-    
-    # Return a PIL Image when generating
-    mock_image = Image.new("RGB", (1024, 1024))
-    mock_pipeline_inst.generate = AsyncMock(return_value=[mock_image])
 
     # Parameters for upscale
     params = GenerationParams(
@@ -205,7 +205,7 @@ async def test_engine_manager_upscale_dispatch(mock_img2img_class):
 
     # Assertions
     # 1. Pipeline instance is created
-    mock_img2img_class.assert_called_once_with(settings)
+    mock_superres_class.assert_called_once_with(settings)
     # 2. generate was called on pipeline wrapper
     mock_pipeline_inst.generate.assert_called_once_with(params, "gen_123", None)
     # 3. Storage was called to save the output image

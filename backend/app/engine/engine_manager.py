@@ -15,6 +15,7 @@ from app.core.exceptions.base import EngineError, ModelNotLoadedError
 from app.core.interfaces.ai_engine import IAIEngine
 from app.engine.pipelines.img2img import Img2ImgPipeline
 from app.engine.pipelines.inpaint import InpaintPipeline
+from app.engine.pipelines.super_resolution import SuperResolutionPipeline
 from app.engine.pipelines.txt2img import Txt2ImgPipeline
 from app.engine.vram_manager import VRAMManager
 
@@ -57,6 +58,7 @@ class AIEngineManager(IAIEngine):
         self._txt2img_pipeline: Txt2ImgPipeline | None = None
         self._img2img_pipeline: Img2ImgPipeline | None = None
         self._inpaint_pipeline: InpaintPipeline | None = None
+        self._super_resolution_pipeline: SuperResolutionPipeline = SuperResolutionPipeline(settings)
 
     async def generate(
         self,
@@ -142,29 +144,7 @@ class AIEngineManager(IAIEngine):
                 )
                 dir_name = "inpaint"
             elif params.type == GenerationType.UPSCALE:
-                # Share components from active pipelines if loaded to save time/VRAM
-                if self._img2img_pipeline is None or self._img2img_pipeline.pipeline is None:
-                    self._img2img_pipeline = Img2ImgPipeline(self._settings)
-                    has_txt2img = (
-                        self._txt2img_pipeline is not None
-                        and self._txt2img_pipeline.pipeline is not None
-                    )
-                    has_inpaint = (
-                        self._inpaint_pipeline is not None
-                        and self._inpaint_pipeline.pipeline is not None
-                    )
-                    if has_txt2img:
-                        self._img2img_pipeline.load_from_components(
-                            self._txt2img_pipeline.pipeline.components
-                        )
-                    elif has_inpaint:
-                        self._img2img_pipeline.load_from_components(
-                            self._inpaint_pipeline.pipeline.components
-                        )
-                    else:
-                        await self._img2img_pipeline.load(model_path)
-
-                pil_images = await self._img2img_pipeline.generate(
+                pil_images = await self._super_resolution_pipeline.generate(
                     params, generation_id, progress_callback
                 )
                 dir_name = "upscale"
