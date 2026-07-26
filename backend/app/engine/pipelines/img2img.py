@@ -133,13 +133,16 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
         # Resolve prompt, negative_prompt, and denoise_strength
         # (Allows UPSCALE mode or missing values to use high-quality defaults)
         is_upscale = params.type == GenerationType.UPSCALE
-        prompt = params.prompt
-        if not prompt or prompt == "masterpiece":
+        if is_upscale:
             prompt = "masterpiece, high quality, sharp focus, extremely detailed texture, photorealistic, 8k resolution, clear details"
-
-        negative_prompt = params.negative_prompt
-        if not negative_prompt:
             negative_prompt = "blurry, low quality, noise, out of focus, deformed, ugly, pixelated, raw photo"
+        else:
+            prompt = params.prompt
+            if not prompt or prompt == "masterpiece":
+                prompt = "masterpiece, high quality, sharp focus, extremely detailed texture, photorealistic, 8k resolution, clear details"
+            negative_prompt = params.negative_prompt
+            if not negative_prompt:
+                negative_prompt = "blurry, low quality, noise, out of focus, deformed, ugly, pixelated, raw photo"
 
         denoise_strength = 0.25 if is_upscale else params.denoise_strength
 
