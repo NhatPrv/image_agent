@@ -87,7 +87,7 @@ class AIEngineManager(IAIEngine):
             pil_images = []
             if params.type == GenerationType.TEXT_TO_IMAGE:
                 # Setup txt2img if not already initialized
-                if self._txt2img_pipeline is None:
+                if self._txt2img_pipeline is None or self._txt2img_pipeline.pipeline is None:
                     self._txt2img_pipeline = Txt2ImgPipeline(self._settings)
                     await self._txt2img_pipeline.load(model_path)
 
@@ -97,7 +97,7 @@ class AIEngineManager(IAIEngine):
                 dir_name = "txt2img"
             elif params.type == GenerationType.IMAGE_TO_IMAGE:
                 # Share components from txt2img if loaded to save time/VRAM
-                if self._img2img_pipeline is None:
+                if self._img2img_pipeline is None or self._img2img_pipeline.pipeline is None:
                     self._img2img_pipeline = Img2ImgPipeline(self._settings)
                     has_txt2img = (
                         self._txt2img_pipeline is not None
@@ -116,7 +116,7 @@ class AIEngineManager(IAIEngine):
                 dir_name = "img2img"
             elif params.type == GenerationType.INPAINT:
                 # Share components from active pipelines if loaded to save time/VRAM
-                if self._inpaint_pipeline is None:
+                if self._inpaint_pipeline is None or self._inpaint_pipeline.pipeline is None:
                     self._inpaint_pipeline = InpaintPipeline(self._settings)
                     has_txt2img = (
                         self._txt2img_pipeline is not None
@@ -143,7 +143,7 @@ class AIEngineManager(IAIEngine):
                 dir_name = "inpaint"
             elif params.type == GenerationType.UPSCALE:
                 # Share components from active pipelines if loaded to save time/VRAM
-                if self._img2img_pipeline is None:
+                if self._img2img_pipeline is None or self._img2img_pipeline.pipeline is None:
                     self._img2img_pipeline = Img2ImgPipeline(self._settings)
                     has_txt2img = (
                         self._txt2img_pipeline is not None
