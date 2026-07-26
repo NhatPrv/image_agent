@@ -100,10 +100,12 @@ class InpaintPipeline(BaseDiffusionPipeline):
         """
         logger.info("Initializing Inpainting pipeline reusing existing components.")
         try:
-            if "text_encoder_2" in components:
-                self.pipeline = StableDiffusionXLInpaintPipeline(**components)
+            # Filter out components with None values to prevent 'NoneType' object is not iterable error in diffusers
+            valid_components = {k: v for k, v in components.items() if v is not None}
+            if "text_encoder_2" in valid_components:
+                self.pipeline = StableDiffusionXLInpaintPipeline(**valid_components)
             else:
-                self.pipeline = StableDiffusionInpaintPipeline(**components)
+                self.pipeline = StableDiffusionInpaintPipeline(**valid_components)
             self.apply_optimizations()
         except Exception as e:
             logger.error("Failed to create inpainting pipeline from components: %s", str(e))
