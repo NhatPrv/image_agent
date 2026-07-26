@@ -12,7 +12,7 @@ from typing import Any, Callable
 
 import cv2
 import numpy as np
-from PIL import Image as PILImage
+from PIL import Image as PILImage, ImageEnhance, ImageFilter
 
 import logging
 
@@ -38,39 +38,50 @@ class SuperResolutionPipeline:
         pass
 
     def _step1_general_super_resolution(self, img_np: np.ndarray, target_w: int, target_h: int) -> np.ndarray:
-        """Step 1: General Super-Resolution scaling using Lanczos4 interpolation with bilateral noise reduction."""
+        """Step 1: General Super-Resolution scaling using Lanczos4 interpolation with adaptive detail preservation."""
         # High quality scaling using OpenCV INTER_LANCZOS4
         upscaled = cv2.resize(img_np, (target_w, target_h), interpolation=cv2.INTER_LANCZOS4)
-        # Apply gentle bilateral filter to remove pixelation noise while preserving sharp boundaries
-        denoised = cv2.bilateralFilter(upscaled, d=5, sigmaColor=20, sigmaSpace=20)
+        # Apply subtle bilateral filter to reduce JPEG/pixelation noise while preserving sharp boundaries
+        denoised = cv2.bilateralFilter(upscaled, d=3, sigmaColor=15, sigmaSpace=15)
         return denoised
 
     def _step2_detail_and_face_restoration(self, img_np: np.ndarray) -> np.ndarray:
-        """Step 2: Detail & Feature Enhancement via LAB Unsharp Masking."""
-        # Convert to LAB color space to apply sharpening on Lightness channel only (prevents color distortion)
-        lab = cv2.cvtColor(img_np, cv2.COLOR_RGB2LAB)
-        l_channel, a_channel, b_channel = cv2.split(lab)
-
-        # Unsharp mask on L channel
-        gaussian = cv2.GaussianBlur(l_channel, (0, 0), 3.0)
-        unsharp = cv2.addWeighted(l_channel, 1.35, gaussian, -0.35, 0)
-
-        merged_lab = cv2.merge((unsharp, a_channel, b_channel))
-        enhanced_rgb = cv2.cvtColor(merged_lab, cv2.COLOR_LAB2RGB)
-        return enhanced_rgb
-
-    def _step3_color_and_clarity_adjustment(self, img_np: np.ndarray) -> np.ndarray:
-        """Step 3: CLAHE Contrast Adjustment & Final Clarity Polish."""
-        # Apply Contrast Limited Adaptive Histogram Equalization (CLAHE) on Y channel in YCrCb
+        """Step 2: Multi-Scale Unsharp Masking & High-Frequency Texture Recovery (SnapEdit Style)."""
+        # Convert to YCrCb space to operate on Luminance (Y) channel
         ycrcb = cv2.cvtColor(img_np, cv2.COLOR_RGB2YCrCb)
         y, cr, cb = cv2.split(ycrcb)
 
-        clahe = cv2.createCLAHE(clipLimit=1.2, tileGridSize=(8, 8))
+        # Multi-scale Gaussian blurring for dual-frequency sharpening
+        g1 = cv2.GaussianBlur(y, (0, 0), 1.2)  # Fine micro-details (hair, eyes, skin texture)
+        g2 = cv2.GaussianBlur(y, (0, 0), 3.5)  # Medium structure boundaries
+
+        # Dual-layer Unsharp Masking
+        y_fine = cv2.addWeighted(y, 1.8, g1, -0.8, 0)
+        y_sharp = cv2.addWeighted(y_fine, 1.35, g2, -0.35, 0)
+
+        merged_ycrcb = cv2.merge((np.clip(y_sharp, 0, 255).astype(np.uint8), cr, cb))
+        enhanced_rgb = cv2.cvtColor(merged_ycrcb, cv2.COLOR_YCrCb2RGB)
+        return enhanced_rgb
+
+    def _step3_color_and_clarity_adjustment(self, img_np: np.ndarray) -> np.ndarray:
+        """Step 3: CLAHE Contrast Adjustment & SnapEdit Clarity / Vibrance Polish."""
+        # Apply Contrast Limited Adaptive Histogram Equalization (CLAHE) on Y channel
+        ycrcb = cv2.cvtColor(img_np, cv2.COLOR_RGB2YCrCb)
+        y, cr, cb = cv2.split(ycrcb)
+
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         cl = clahe.apply(y)
 
         final_ycrcb = cv2.merge((cl, cr, cb))
-        final_rgb = cv2.cvtColor(final_ycrcb, cv2.COLOR_YCrCb2RGB)
-        return final_rgb
+        rgb = cv2.cvtColor(final_ycrcb, cv2.COLOR_YCrCb2RGB)
+
+        # Final PIL Polish for professional DSLR clarity & contrast
+        pil_img = PILImage.fromarray(rgb)
+        pil_img = ImageEnhance.Sharpness(pil_img).enhance(1.45)
+        pil_img = ImageEnhance.Contrast(pil_img).enhance(1.12)
+        pil_img = ImageEnhance.Color(pil_img).enhance(1.08)
+
+        return np.array(pil_img)
 
     async def generate(
         self,
