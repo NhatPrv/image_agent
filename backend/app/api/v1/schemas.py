@@ -57,7 +57,7 @@ class LoRARequestConfig(BaseModel):
 class GenerateRequest(BaseModel):
     """Payload to initiate a new image generation request."""
 
-    prompt: str = Field(..., min_length=1, description="Text prompt guiding the image generation.")
+    prompt: str = Field(default="masterpiece", description="Text prompt guiding the image generation.")
     negative_prompt: str = Field(default="", description="Text prompt specifying what to avoid.")
     width: int = Field(default=512, ge=128, le=8192)
     height: int = Field(default=512, ge=128, le=8192)

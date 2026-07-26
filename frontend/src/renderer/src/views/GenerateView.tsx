@@ -294,9 +294,11 @@ export function GenerateView(): React.JSX.Element {
       }
     }
 
+    const effectivePrompt = (type === 'upscale' && (!prompt || !prompt.trim())) ? 'masterpiece' : (prompt && prompt.trim() ? prompt : 'masterpiece')
+
     const payload = {
-      prompt,
-      negative_prompt: negativePrompt,
+      prompt: effectivePrompt,
+      negative_prompt: negativePrompt || '',
       width,
       height,
       steps,
