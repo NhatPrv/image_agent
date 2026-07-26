@@ -130,6 +130,21 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
             msg = "Input image path is required for Image-to-Image generation."
             raise GenerationError(msg)
 
+        # Resolve absolute path for input_image_path if relative path or filename is given
+        from pathlib import Path
+        input_path = Path(params.input_image_path)
+        if not input_path.is_absolute() or not input_path.exists():
+            outputs_dir = Path(self.settings.paths.outputs_dir).resolve()
+            resolved_path = outputs_dir / input_path
+            if resolved_path.exists():
+                input_path = resolved_path
+            else:
+                matches = list(outputs_dir.rglob(input_path.name))
+                if matches:
+                    input_path = matches[0]
+
+        resolved_input_str = str(input_path)
+
         # Resolve prompt, negative_prompt, and denoise_strength
         # (Allows UPSCALE mode or missing values to use high-quality defaults)
         is_upscale = params.type == GenerationType.UPSCALE
@@ -152,7 +167,7 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
 
             def _load_img():
                 from PIL import ImageOps
-                with PILImage.open(params.input_image_path) as img:
+                with PILImage.open(resolved_input_str) as img:
                     img = ImageOps.exif_transpose(img)
                     # Convert to RGB and resize to match settings
                     return img.convert("RGB").resize((params.width, params.height))

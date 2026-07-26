@@ -129,6 +129,34 @@ class InpaintPipeline(BaseDiffusionPipeline):
             msg = "Both input image path and mask image path are required for Inpainting."
             raise GenerationError(msg)
 
+        from pathlib import Path
+        outputs_dir = Path(self.settings.paths.outputs_dir).resolve()
+
+        # Resolve input_image_path
+        input_path = Path(params.input_image_path)
+        if not input_path.is_absolute() or not input_path.exists():
+            resolved = outputs_dir / input_path
+            if resolved.exists():
+                input_path = resolved
+            else:
+                matches = list(outputs_dir.rglob(input_path.name))
+                if matches:
+                    input_path = matches[0]
+
+        # Resolve mask_image_path
+        mask_path = Path(params.mask_image_path)
+        if not mask_path.is_absolute() or not mask_path.exists():
+            resolved = outputs_dir / mask_path
+            if resolved.exists():
+                mask_path = resolved
+            else:
+                matches = list(outputs_dir.rglob(mask_path.name))
+                if matches:
+                    mask_path = matches[0]
+
+        resolved_input_str = str(input_path)
+        resolved_mask_str = str(mask_path)
+
         # ─── 1. Load and process input and mask images ───
         loop = asyncio.get_running_loop()
         try:
@@ -136,8 +164,8 @@ class InpaintPipeline(BaseDiffusionPipeline):
             def _load_images():
                 from PIL import ImageOps
                 with (
-                    PILImage.open(params.input_image_path) as init_img,
-                    PILImage.open(params.mask_image_path) as mask_img,
+                    PILImage.open(resolved_input_str) as init_img,
+                    PILImage.open(resolved_mask_str) as mask_img,
                 ):
                     init_img = ImageOps.exif_transpose(init_img)
                     mask_img = ImageOps.exif_transpose(mask_img)
