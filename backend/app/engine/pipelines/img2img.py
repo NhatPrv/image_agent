@@ -183,17 +183,24 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
         params.extra["seed_used"] = seed_used
 
         # ─── 4. Determine if Tiled Upscaling is needed ───
-        is_high_res = params.width > 1024 or params.height > 1024
+        # Increase threshold to 2048 to process up to 2K directly (perfect global coherence/no splits on faces)
+        is_high_res = params.width > 2048 or params.height > 2048
         total_steps = params.steps
         start_time = None
 
         if is_high_res:
             import numpy as np
 
+            # Detect if pipeline is SDXL to use optimal tile size
+            is_sdxl = isinstance(self.pipeline, StableDiffusionXLImg2ImgPipeline)
+            default_tile = 1024 if is_sdxl else 512
+
             # Configure grid for Tiled Img2Img
-            tile_size = min(768, params.width, params.height)
+            tile_size = min(default_tile, params.width, params.height)
             tile_size = max(64, (tile_size // 8) * 8)
-            overlap = min(96, tile_size // 8)
+
+            # Enforce 25% overlap for smooth blending
+            overlap = tile_size // 4
             overlap = max(8, (overlap // 8) * 8)
 
             def get_grid_coords(total_size: int, tile_s: int, over: int) -> list[int]:
@@ -214,9 +221,9 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
 
             # Create 2D feather mask for seamless blending
             mask = np.ones((tile_size, tile_size), dtype=np.float32)
-            feather = min(32, overlap // 2)
-            for i in range(feather):
-                val = (i + 1) / (feather + 1)
+            # Smooth linear gradient across the entire overlap region
+            for i in range(overlap):
+                val = i / overlap
                 mask[i, :] *= val
                 mask[-1 - i, :] *= val
                 mask[:, i] *= val
