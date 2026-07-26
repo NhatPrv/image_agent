@@ -230,16 +230,19 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
                 mask[:, -1 - i] *= val
             mask_3d = np.expand_dims(mask, axis=-1)
 
-            combined_total_steps = total_tiles * total_steps
+            # Calculate actual steps executed per tile (based on denoise strength)
+            actual_steps = max(1, int(params.steps * denoise_strength))
+            combined_total_steps = total_tiles * actual_steps
 
             # ─── 5. Inference execution (Tiled) ───
             logger.info(
-                "Executing Tiled Image-to-Image | Prompt: '%s' | Strength: %.2f | Size: %dx%d (Tiles: %d)",
+                "Executing Tiled Image-to-Image | Prompt: '%s' | Strength: %.2f | Size: %dx%d (Tiles: %d, Steps Per Tile: %d)",
                 prompt,
                 denoise_strength,
                 params.width,
                 params.height,
                 total_tiles,
+                actual_steps,
             )
 
             try:
@@ -270,8 +273,10 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
                                     start_time = time.perf_counter()
 
                                 if progress_callback:
+                                    # step is 0-indexed loop step index (0 to actual_steps - 1)
+                                    current_step = step + 1
+                                    current_combined_step = current_t_idx * actual_steps + current_step
                                     elapsed_ms = int((time.perf_counter() - start_time) * 1000.0)
-                                    current_combined_step = current_t_idx * total_steps + step
                                     avg_step_time = (
                                         (elapsed_ms / current_combined_step)
                                         if current_combined_step > 0
@@ -280,7 +285,18 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
                                     est_remaining_ms = int(
                                         avg_step_time * (combined_total_steps - current_combined_step)
                                     )
-                                    percent = (current_combined_step / combined_total_steps) * 100.0
+                                    percent = min(100.0, (current_combined_step / combined_total_steps) * 100.0)
+
+                                    logger.info(
+                                        "Tiled Img2Img Tile %d/%d, Step %d/%d (%.1f%%) | Elapsed: %dms | Est. Remaining: %dms",
+                                        current_t_idx + 1,
+                                        total_tiles,
+                                        current_step,
+                                        actual_steps,
+                                        percent,
+                                        elapsed_ms,
+                                        est_remaining_ms,
+                                    )
 
                                     from app.core.entities.generation import (
                                         GenerationProgress as ProgressEntity,
@@ -297,6 +313,10 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
                                     progress_callback(progress_data)
                                 return callback_kwargs
 
+                            # Old style callback bridge for backwards compatibility
+                            def _old_local_callback(step: int, timestep: int, latents: torch.FloatTensor, current_t_idx=t_idx):
+                                _local_callback(None, step, timestep, {}, current_t_idx)
+
                             # Denoise tile
                             output = self.pipeline(
                                 prompt=prompt,
@@ -309,6 +329,8 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
                                 num_images_per_prompt=params.batch_size,
                                 callback_on_step_end=_local_callback,
                                 callback_on_step_end_tensor_inputs=["latents"],
+                                callback=_old_local_callback,
+                                callback_steps=1,
                             )
 
                             output_tile = np.array(output.images[0]).astype(np.float32) / 255.0
@@ -329,7 +351,9 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
                 msg = f"Tiled inference execution failed: {e}"
                 raise GenerationError(msg) from e
 
-        else:
+            # Calculate actual steps executed in Img2Img (based on denoise strength)
+            actual_steps = max(1, int(params.steps * denoise_strength))
+
             # ─── Standard Progress Tracking Callback ───
             def _step_callback(
                 _pipe_self,
@@ -342,17 +366,28 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
                     start_time = time.perf_counter()
 
                 if progress_callback:
+                    # In diffusers img2img, step is 0-indexed loop counter (0 to actual_steps - 1)
+                    current_step = step + 1
                     elapsed_ms = int((time.perf_counter() - start_time) * 1000.0)
-                    avg_step_time = (elapsed_ms / step) if step > 0 else 0
-                    est_remaining_ms = int(avg_step_time * (total_steps - step))
-                    percent = (step / total_steps) * 100.0
+                    avg_step_time = (elapsed_ms / current_step) if current_step > 0 else 0
+                    est_remaining_ms = int(avg_step_time * (actual_steps - current_step))
+                    percent = min(100.0, (current_step / actual_steps) * 100.0)
+
+                    logger.info(
+                        "Img2Img step %d/%d (%.1f%%) | Elapsed: %dms | Est. Remaining: %dms",
+                        current_step,
+                        actual_steps,
+                        percent,
+                        elapsed_ms,
+                        est_remaining_ms,
+                    )
 
                     from app.core.entities.generation import GenerationProgress as ProgressEntity
 
                     progress_data = ProgressEntity(
                         generation_id=generation_id,
-                        current_step=step,
-                        total_steps=total_steps,
+                        current_step=current_step,
+                        total_steps=actual_steps,
                         progress_percent=percent,
                         elapsed_ms=elapsed_ms,
                         estimated_remaining_ms=est_remaining_ms,
@@ -360,13 +395,18 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
                     progress_callback(progress_data)
                 return callback_kwargs
 
+            # Old style callback bridge for backwards compatibility
+            def _old_callback(step: int, timestep: int, latents: torch.FloatTensor):
+                _step_callback(None, step, timestep, {})
+
             # ─── 5. Inference execution (Standard) ───
             logger.info(
-                "Executing Standard Image-to-Image | Prompt: '%s' | Strength: %.2f | Size: %dx%d",
+                "Executing Standard Image-to-Image | Prompt: '%s' | Strength: %.2f | Size: %dx%d (Steps: %d)",
                 prompt,
                 denoise_strength,
                 params.width,
                 params.height,
+                actual_steps,
             )
 
             try:
@@ -383,6 +423,8 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
                         num_images_per_prompt=params.batch_size,
                         callback_on_step_end=_step_callback,
                         callback_on_step_end_tensor_inputs=["latents"],
+                        callback=_old_callback,
+                        callback_steps=1,
                     )
                     return output.images
 
