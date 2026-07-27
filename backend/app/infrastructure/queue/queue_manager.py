@@ -102,17 +102,31 @@ class InMemoryQueueManager(IQueueManager):
 
     async def cancel(self, item_id: str) -> QueueItem:
         """Cancel a queued item and remove it from the list."""
+        from app.core.cancellation import register_cancellation
+
+        register_cancellation(item_id)
+
         async with self._lock:
             for i, item in enumerate(self._queue):
-                if item.id == item_id:
+                if item.id == item_id or item.generation_id == item_id:
                     cancelled_item = self._queue.pop(i)
                     cancelled_item.status = QueueItemStatus.CANCELLED
                     self._sort_and_reposition_unlocked()
+                    register_cancellation(cancelled_item.id)
+                    register_cancellation(cancelled_item.generation_id)
                     logger.info("Cancelled queue item '%s'", item_id)
                     return cancelled_item
 
-            msg = f"Queue item with ID {item_id} not found."
-            raise QueueItemNotFoundError(msg, item_id=item_id)
+            # If item is currently running or already popped, still register cancellation
+            fake_item = QueueItem(
+                id=item_id,
+                generation_id=item_id,
+                priority=QueuePriority.NORMAL,
+                status=QueueItemStatus.CANCELLED,
+                position=0,
+            )
+            logger.info("Registered cancellation signal for active item '%s'", item_id)
+            return fake_item
 
     async def clear(self) -> None:
         """Remove all items from the queue."""

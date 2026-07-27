@@ -117,8 +117,18 @@ class SuperResolutionPipeline:
         """Compatibility no-op."""
         pass
 
-    def _tile_process(self, img_tensor: torch.Tensor, tile_size: int = 512, tile_pad: int = 32) -> torch.Tensor:
+    def _tile_process(
+        self,
+        img_tensor: torch.Tensor,
+        tile_size: int = 512,
+        tile_pad: int = 32,
+        generation_id: str = "",
+        progress_callback: Callable[[GenerationProgress], Any] | None = None,
+        start_time: float = 0.0,
+    ) -> torch.Tensor:
         """Process image in overlapping tiles to prevent VRAM allocation spikes on 8K targets."""
+        from app.core.cancellation import is_cancelled, unregister_cancellation
+
         batch, channel, height, width = img_tensor.shape
         output_height = height * 4
         output_width = width * 4
@@ -127,9 +137,30 @@ class SuperResolutionPipeline:
 
         tiles_x = math.ceil(width / tile_size)
         tiles_y = math.ceil(height / tile_size)
+        total_tiles = tiles_x * tiles_y
 
         for y in range(tiles_y):
             for x in range(tiles_x):
+                # Instant Cancellation Check
+                if generation_id and is_cancelled(generation_id):
+                    unregister_cancellation(generation_id)
+                    raise GenerationError("Generation cancelled by user.")
+
+                tile_index = y * tiles_x + x + 1
+                if progress_callback:
+                    percent = 10.0 + (tile_index / total_tiles) * 85.0
+                    elapsed = int((time.perf_counter() - start_time) * 1000) if start_time > 0 else 0
+                    progress_callback(
+                        GenerationProgress(
+                            generation_id=generation_id,
+                            current_step=tile_index,
+                            total_steps=total_tiles,
+                            progress_percent=percent,
+                            elapsed_ms=elapsed,
+                            estimated_remaining_ms=int((total_tiles - tile_index) * 150),
+                        )
+                    )
+
                 # Calculate tile input bounds with padding
                 y_start = max(0, y * tile_size - tile_pad)
                 y_end = min(height, (y + 1) * tile_size + tile_pad)
@@ -156,6 +187,10 @@ class SuperResolutionPipeline:
                 output[:, :, out_y_start:out_y_end, out_x_start:out_x_end] = out_tile[
                     :, :, tile_y_offset : tile_y_offset + crop_h, tile_x_offset : tile_x_offset + crop_w
                 ]
+
+                # Clear intermediate tile memory
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
 
         return output
 
@@ -224,7 +259,14 @@ class SuperResolutionPipeline:
             with torch.no_grad():
                 h, w = img_rgb.shape[:2]
                 if h > 1024 or w > 1024:
-                    out_t = self._tile_process(img_t, tile_size=512, tile_pad=32)
+                    out_t = self._tile_process(
+                        img_t,
+                        tile_size=512,
+                        tile_pad=32,
+                        generation_id=generation_id,
+                        progress_callback=progress_callback,
+                        start_time=start_time,
+                    )
                 else:
                     out_t = self._model(img_t)  # type: ignore
 
