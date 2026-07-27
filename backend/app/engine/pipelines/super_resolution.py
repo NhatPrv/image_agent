@@ -228,39 +228,28 @@ class SuperResolutionPipeline:
                 else:
                     out_t = self._model(img_t)  # type: ignore
 
-            # 4. Clamp & convert back to NumPy array (H, W, C)
-            out_t = torch.clamp(out_t, 0.0, 1.0)
+                # 4. GPU-Accelerated High-Frequency Unsharp Masking Kernel (100% GPU CUDA)
+                sharpen_kernel = torch.tensor(
+                    [[-0.05, -0.15, -0.05],
+                     [-0.15,  1.80, -0.15],
+                     [-0.05, -0.15, -0.05]],
+                    dtype=out_t.dtype,
+                    device=out_t.device
+                ).view(1, 1, 3, 3).repeat(3, 1, 1, 1)
+
+                out_t = F.conv2d(out_t, sharpen_kernel, padding=1, groups=3)
+                out_t = torch.clamp(out_t, 0.0, 1.0)
+
+            # 5. Convert back to NumPy array (H, W, C)
             out_np = (out_t.squeeze(0).permute(1, 2, 0).cpu().numpy() * 255.0).astype(np.uint8)
 
-            # 5. Resize to exact requested target_w, target_h if scale factor differs
+            # 6. Resize to exact requested target_w, target_h if scale factor differs
             if out_np.shape[1] != target_w or out_np.shape[0] != target_h:
                 out_np = cv2.resize(out_np, (target_w, target_h), interpolation=cv2.INTER_LANCZOS4)
 
-            # 6. Apply Ultra-HD SnapEdit-level High-Frequency Detail & Clarity Polish
-            # Step A: Convert to YCrCb space for Luminance-only sharpening (prevents color artifacts)
-            ycrcb = cv2.cvtColor(out_np, cv2.COLOR_RGB2YCrCb)
-            y, cr, cb = cv2.split(ycrcb)
-
-            # Step B: Multi-Scale Gaussian Unsharp Masking on Y Channel
-            g1 = cv2.GaussianBlur(y, (0, 0), 1.0)  # Micro-edge (hair, skin pores, eye highlights)
-            g2 = cv2.GaussianBlur(y, (0, 0), 3.0)  # Structural contours
-
-            # Fine micro-details boost + Medium structure sharpening
-            y_fine = cv2.addWeighted(y, 2.2, g1, -1.2, 0)
-            y_sharp = cv2.addWeighted(y_fine, 1.4, g2, -0.4, 0)
-
-            # Step C: CLAHE Local Contrast Enhancement for DSLR Clarity
-            clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
-            y_clahe = clahe.apply(np.clip(y_sharp, 0, 255).astype(np.uint8))
-
-            final_ycrcb = cv2.merge((y_clahe, cr, cb))
-            sharp_rgb = cv2.cvtColor(final_ycrcb, cv2.COLOR_YCrCb2RGB)
-
-            # Step D: Final PIL Polish for Vibrance & Micro-Contrast
-            pil_img = PILImage.fromarray(sharp_rgb)
-            pil_img = ImageEnhance.Sharpness(pil_img).enhance(1.8)
-            pil_img = ImageEnhance.Contrast(pil_img).enhance(1.10)
-            pil_img = ImageEnhance.Color(pil_img).enhance(1.08)
+            pil_img = PILImage.fromarray(out_np)
+            pil_img = ImageEnhance.Sharpness(pil_img).enhance(1.25)
+            pil_img = ImageEnhance.Contrast(pil_img).enhance(1.08)
 
             if progress_callback:
                 progress_callback(
