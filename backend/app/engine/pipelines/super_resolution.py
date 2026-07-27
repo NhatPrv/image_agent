@@ -270,19 +270,7 @@ class SuperResolutionPipeline:
                 else:
                     out_t = self._model(img_t)  # type: ignore
 
-                # 4. GPU-Accelerated High-Frequency Unsharp Masking Kernel (100% GPU CUDA)
-                sharpen_kernel = torch.tensor(
-                    [[-0.05, -0.15, -0.05],
-                     [-0.15,  1.80, -0.15],
-                     [-0.05, -0.15, -0.05]],
-                    dtype=out_t.dtype,
-                    device=out_t.device
-                ).view(1, 1, 3, 3).repeat(3, 1, 1, 1)
-
-                out_t = F.conv2d(out_t, sharpen_kernel, padding=1, groups=3)
-                out_t = torch.clamp(out_t, 0.0, 1.0)
-
-                # 5. GPU-Accelerated Resize preserving exact native aspect ratio (100% GPU CUDA)
+                # 4. GPU-Accelerated Resize preserving exact native aspect ratio
                 orig_aspect = w / h
                 target_aspect = target_w / target_h
                 if abs(orig_aspect - target_aspect) > 0.005:
@@ -300,12 +288,37 @@ class SuperResolutionPipeline:
                     out_t = F.interpolate(out_t, size=(calc_h, calc_w), mode="bicubic", align_corners=False)
                     out_t = torch.clamp(out_t, 0.0, 1.0)
 
-            # 6. Convert back to NumPy array & PIL Image
+            # 5. Hybrid High-Pass Micro-Texture Recovery Pass (Restores eyelashes, iris highlights, skin pores)
             out_np = (out_t.squeeze(0).permute(1, 2, 0).cpu().numpy() * 255.0).astype(np.uint8)
 
-            pil_img = PILImage.fromarray(out_np)
-            pil_img = ImageEnhance.Sharpness(pil_img).enhance(1.25)
-            pil_img = ImageEnhance.Contrast(pil_img).enhance(1.08)
+            # Create high-pass micro-texture map from original image scaled to target size
+            orig_scaled = cv2.resize(img_rgb, (calc_w, calc_h), interpolation=cv2.INTER_LANCZOS4)
+            orig_blur = cv2.GaussianBlur(orig_scaled, (0, 0), 1.5)
+            high_pass_texture = cv2.addWeighted(orig_scaled, 1.8, orig_blur, -0.8, 0)
+
+            # Fuse Real-ESRGAN AI base with High-Pass Micro-Textures (65% Real-ESRGAN + 35% Original Micro-Details)
+            fused_np = cv2.addWeighted(out_np, 0.65, high_pass_texture, 0.35, 0)
+
+            # 6. Ultra-Sharp Micro-Detail Kernel Pass on GPU (Center Boost 2.6x for pin-sharp eyes & edges)
+            fused_t = torch.from_numpy(fused_np).permute(2, 0, 1).unsqueeze(0).float().to(self._device) / 255.0
+
+            with torch.no_grad():
+                ultra_sharp_kernel = torch.tensor(
+                    [[-0.10, -0.30, -0.10],
+                     [-0.30,  2.60, -0.30],
+                     [-0.10, -0.30, -0.10]],
+                    dtype=fused_t.dtype,
+                    device=fused_t.device
+                ).view(1, 1, 3, 3).repeat(3, 1, 1, 1)
+
+                sharp_t = F.conv2d(fused_t, ultra_sharp_kernel, padding=1, groups=3)
+                sharp_t = torch.clamp(sharp_t, 0.0, 1.0)
+
+            final_np = (sharp_t.squeeze(0).permute(1, 2, 0).cpu().numpy() * 255.0).astype(np.uint8)
+
+            pil_img = PILImage.fromarray(final_np)
+            pil_img = ImageEnhance.Sharpness(pil_img).enhance(1.4)
+            pil_img = ImageEnhance.Contrast(pil_img).enhance(1.06)
 
             if progress_callback:
                 progress_callback(
