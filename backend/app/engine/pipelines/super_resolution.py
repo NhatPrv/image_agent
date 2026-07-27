@@ -170,7 +170,7 @@ class SuperResolutionPipeline:
                 tile = img_tensor[:, :, y_start:y_end, x_start:x_end]
 
                 with torch.no_grad():
-                    out_tile = self._model(tile)  # type: ignore
+                    out_tile = torch.clamp(self._model(tile), 0.0, 1.0)  # type: ignore
 
                 # Calculate tile output bounds without padding seaming
                 out_y_start = y * tile_size * 4
@@ -270,6 +270,8 @@ class SuperResolutionPipeline:
                 else:
                     out_t = self._model(img_t)  # type: ignore
 
+                out_t = torch.clamp(out_t, 0.0, 1.0)
+
                 # 4. GPU-Accelerated Resize preserving exact native aspect ratio
                 orig_aspect = w / h
                 target_aspect = target_w / target_h
@@ -288,7 +290,8 @@ class SuperResolutionPipeline:
                     out_t = F.interpolate(out_t, size=(calc_h, calc_w), mode="bicubic", align_corners=False)
                     out_t = torch.clamp(out_t, 0.0, 1.0)
 
-            # 5. Hybrid High-Pass Micro-Texture Recovery Pass (Restores eyelashes, iris highlights, skin pores)
+            # 5. Hybrid High-Pass Micro-Detail Pass on Float32 Y-Luminance Channel (Artifact-Free)
+            out_t = torch.clamp(out_t, 0.0, 1.0)
             out_np = (out_t.squeeze(0).permute(1, 2, 0).cpu().numpy() * 255.0).astype(np.uint8)
 
             # Create high-pass micro-texture map from original image scaled to target size
