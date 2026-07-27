@@ -282,9 +282,22 @@ class SuperResolutionPipeline:
                 out_t = F.conv2d(out_t, sharpen_kernel, padding=1, groups=3)
                 out_t = torch.clamp(out_t, 0.0, 1.0)
 
-                # 5. GPU-Accelerated Resize to exact target (target_h, target_w) in 0.03s (100% GPU CUDA)
-                if out_t.shape[2] != target_h or out_t.shape[3] != target_w:
-                    out_t = F.interpolate(out_t, size=(target_h, target_w), mode="bicubic", align_corners=False)
+                # 5. GPU-Accelerated Resize preserving exact native aspect ratio (100% GPU CUDA)
+                orig_aspect = w / h
+                target_aspect = target_w / target_h
+                if abs(orig_aspect - target_aspect) > 0.005:
+                    if w * target_h > h * target_w:
+                        calc_w = target_w
+                        calc_h = int(round(target_w / orig_aspect))
+                    else:
+                        calc_h = target_h
+                        calc_w = int(round(target_h * orig_aspect))
+                else:
+                    calc_w = target_w
+                    calc_h = target_h
+
+                if out_t.shape[2] != calc_h or out_t.shape[3] != calc_w:
+                    out_t = F.interpolate(out_t, size=(calc_h, calc_w), mode="bicubic", align_corners=False)
                     out_t = torch.clamp(out_t, 0.0, 1.0)
 
             # 6. Convert back to NumPy array & PIL Image
