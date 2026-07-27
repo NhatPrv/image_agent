@@ -23,6 +23,20 @@ import {
 } from 'lucide-react'
 import { CanvasMaskEditor } from '../components/CanvasMaskEditor'
 
+function getUpscaleTargetDimensions(w: number, h: number, factor: number): { width: number; height: number } {
+  let targetW = w * factor
+  let targetH = h * factor
+  if (targetW > 8192 || targetH > 8192) {
+    const scale = 8192 / Math.max(targetW, targetH)
+    targetW = targetW * scale
+    targetH = targetH * scale
+  }
+  const aspect = w / h
+  const roundedW = Math.round(targetW / 8) * 8
+  const roundedH = Math.round((roundedW / aspect) / 8) * 8
+  return { width: roundedW, height: roundedH }
+}
+
 export function GenerateView(): React.JSX.Element {
   const connected = useSystemStore((state) => state.connected)
 
@@ -151,18 +165,8 @@ export function GenerateView(): React.JSX.Element {
             if (img.naturalWidth > 0 && img.naturalHeight > 0) {
               setOriginalSize({ width: img.naturalWidth, height: img.naturalHeight })
               if (type === 'upscale') {
-                let rawW = img.naturalWidth * scaleFactor
-                let rawH = img.naturalHeight * scaleFactor
-                if (rawW > 8192 || rawH > 8192) {
-                  const maxDim = Math.max(rawW, rawH)
-                  const clampRatio = 8192 / maxDim
-                  rawW = rawW * clampRatio
-                  rawH = rawH * clampRatio
-                }
-                const aspect = img.naturalWidth / img.naturalHeight
-                const targetW = Math.round(rawW / 8) * 8
-                const targetH = Math.round((targetW / aspect) / 8) * 8
-                setParams({ width: targetW, height: targetH })
+                const target = getUpscaleTargetDimensions(img.naturalWidth, img.naturalHeight, scaleFactor)
+                setParams({ width: target.width, height: target.height })
               } else if (type === 'inpaint') {
                 const targetW = Math.round(img.naturalWidth / 8) * 8
                 const targetH = Math.round(img.naturalHeight / 8) * 8
@@ -181,18 +185,8 @@ export function GenerateView(): React.JSX.Element {
   // Sync upscale target parameters when type or scaleFactor changes
   useEffect(() => {
     if (type === 'upscale' && originalSize) {
-      let rawW = originalSize.width * scaleFactor
-      let rawH = originalSize.height * scaleFactor
-      if (rawW > 8192 || rawH > 8192) {
-        const maxDim = Math.max(rawW, rawH)
-        const clampRatio = 8192 / maxDim
-        rawW = rawW * clampRatio
-        rawH = rawH * clampRatio
-      }
-      const aspect = originalSize.width / originalSize.height
-      const targetW = Math.round(rawW / 8) * 8
-      const targetH = Math.round((targetW / aspect) / 8) * 8
-      setParams({ width: targetW, height: targetH })
+      const target = getUpscaleTargetDimensions(originalSize.width, originalSize.height, scaleFactor)
+      setParams({ width: target.width, height: target.height })
     }
   }, [type, scaleFactor, originalSize])
 
@@ -663,8 +657,8 @@ export function GenerateView(): React.JSX.Element {
                   <div className="flex justify-between text-[11px] text-violet-400">
                     <span>Upscaled Target ({scaleFactor}x):</span>
                     <span className="font-bold text-violet-300 font-mono">
-                      {Math.min(8192, Math.round(originalSize.width * scaleFactor))} ×{' '}
-                      {Math.min(8192, Math.round(originalSize.height * scaleFactor))} px
+                      {getUpscaleTargetDimensions(originalSize.width, originalSize.height, scaleFactor).width} ×{' '}
+                      {getUpscaleTargetDimensions(originalSize.width, originalSize.height, scaleFactor).height} px
                     </span>
                   </div>
                 </div>
