@@ -292,33 +292,47 @@ class SuperResolutionPipeline:
             out_np = (out_t.squeeze(0).permute(1, 2, 0).cpu().numpy() * 255.0).astype(np.uint8)
 
             # Create high-pass micro-texture map from original image scaled to target size
+            # 5. Hybrid High-Pass Micro-Detail Pass on Float32 Y-Luminance Channel (Artifact-Free)
+            # Convert to YCrCb to isolate Luminance Y (sharpness) from Color Cr, Cb
+            ycrcb_esrgan = cv2.cvtColor(out_np, cv2.COLOR_RGB2YCrCb).astype(np.float32) / 255.0
             orig_scaled = cv2.resize(img_rgb, (calc_w, calc_h), interpolation=cv2.INTER_LANCZOS4)
-            orig_blur = cv2.GaussianBlur(orig_scaled, (0, 0), 1.5)
-            high_pass_texture = cv2.addWeighted(orig_scaled, 1.8, orig_blur, -0.8, 0)
+            ycrcb_orig = cv2.cvtColor(orig_scaled, cv2.COLOR_RGB2YCrCb).astype(np.float32) / 255.0
 
-            # Fuse Real-ESRGAN AI base with High-Pass Micro-Textures (65% Real-ESRGAN + 35% Original Micro-Details)
-            fused_np = cv2.addWeighted(out_np, 0.65, high_pass_texture, 0.35, 0)
+            y_esrgan = ycrcb_esrgan[:, :, 0]
+            cr_channel = ycrcb_esrgan[:, :, 1]
+            cb_channel = ycrcb_esrgan[:, :, 2]
+            y_orig = ycrcb_orig[:, :, 0]
 
-            # 6. Ultra-Sharp Micro-Detail Kernel Pass on GPU (Center Boost 2.6x for pin-sharp eyes & edges)
-            fused_t = torch.from_numpy(fused_np).permute(2, 0, 1).unsqueeze(0).float().to(self._device) / 255.0
+            # High-pass micro-texture on float32 Y channel (prevents uint8 overflow splotches)
+            y_blur = cv2.GaussianBlur(y_orig, (0, 0), 1.5)
+            y_high_pass = np.clip(y_orig + (y_orig - y_blur) * 0.7, 0.0, 1.0)
+
+            # Fuse 75% Real-ESRGAN Y + 25% Original High-Pass Y
+            y_fused = np.clip(y_esrgan * 0.75 + y_high_pass * 0.25, 0.0, 1.0)
+
+            # 6. GPU-Accelerated Unsharp Masking Kernel on Float32 Y Channel
+            y_t = torch.from_numpy(y_fused).unsqueeze(0).unsqueeze(0).float().to(self._device)
 
             with torch.no_grad():
-                ultra_sharp_kernel = torch.tensor(
-                    [[-0.10, -0.30, -0.10],
-                     [-0.30,  2.60, -0.30],
-                     [-0.10, -0.30, -0.10]],
-                    dtype=fused_t.dtype,
-                    device=fused_t.device
-                ).view(1, 1, 3, 3).repeat(3, 1, 1, 1)
+                sharp_kernel = torch.tensor(
+                    [[-0.05, -0.15, -0.05],
+                     [-0.15,  1.80, -0.15],
+                     [-0.05, -0.15, -0.05]],
+                    dtype=y_t.dtype,
+                    device=y_t.device
+                ).view(1, 1, 3, 3)
 
-                sharp_t = F.conv2d(fused_t, ultra_sharp_kernel, padding=1, groups=3)
-                sharp_t = torch.clamp(sharp_t, 0.0, 1.0)
+                y_sharp_t = F.conv2d(y_t, sharp_kernel, padding=1)
+                y_sharp_t = torch.clamp(y_sharp_t, 0.0, 1.0)
 
-            final_np = (sharp_t.squeeze(0).permute(1, 2, 0).cpu().numpy() * 255.0).astype(np.uint8)
+            y_sharp = y_sharp_t.squeeze().cpu().numpy()
 
-            pil_img = PILImage.fromarray(final_np)
-            pil_img = ImageEnhance.Sharpness(pil_img).enhance(1.4)
-            pil_img = ImageEnhance.Contrast(pil_img).enhance(1.06)
+            # Merge sharpened Y with untouched original color channels
+            final_ycrcb = np.dstack((y_sharp, cr_channel, cb_channel)) * 255.0
+            final_rgb = cv2.cvtColor(np.clip(final_ycrcb, 0, 255).astype(np.uint8), cv2.COLOR_YCrCb2RGB)
+
+            pil_img = PILImage.fromarray(final_rgb)
+            pil_img = ImageEnhance.Sharpness(pil_img).enhance(1.2)
 
             if progress_callback:
                 progress_callback(
