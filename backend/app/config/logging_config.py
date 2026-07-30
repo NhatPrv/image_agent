@@ -39,7 +39,7 @@ def setup_logging(log_level: str = "DEBUG", logs_dir: Path | None = None) -> Non
 
     # ─── Console Handler (colored for development) ───
     console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.DEBUG)
+    console_handler.setLevel(logging.INFO)
     console_formatter = _ColoredFormatter(
         fmt="%(asctime)s | %(levelname)-8s | %(name)-30s | %(message)s",
         datefmt="%H:%M:%S",
@@ -66,9 +66,16 @@ def setup_logging(log_level: str = "DEBUG", logs_dir: Path | None = None) -> Non
         file_handler.setFormatter(file_formatter)
         root_logger.addHandler(file_handler)
 
-    # ─── Suppress noisy third-party loggers ───
+    # ─── Suppress noisy third-party & debug loggers ───
     logging.getLogger("uvicorn").setLevel(logging.INFO)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
+    logging.getLogger("websockets").setLevel(logging.WARNING)
+    logging.getLogger("websockets.client").setLevel(logging.WARNING)
+    logging.getLogger("websockets.server").setLevel(logging.WARNING)
+    logging.getLogger("websockets.protocol").setLevel(logging.WARNING)
+    logging.getLogger("aiosqlite").setLevel(logging.WARNING)
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
     logging.getLogger("diffusers").setLevel(logging.WARNING)
     logging.getLogger("transformers").setLevel(logging.WARNING)

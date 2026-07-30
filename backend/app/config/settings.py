@@ -27,7 +27,7 @@ class AppSettings(BaseSettings):
     version: str = "0.1.0"
     env: Literal["development", "production", "testing"] = "development"
     debug: bool = True
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "DEBUG"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
     @property
     def is_development(self) -> bool:
