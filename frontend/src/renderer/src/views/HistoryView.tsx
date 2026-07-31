@@ -37,22 +37,28 @@ export function HistoryView(): React.JSX.Element {
     return 'Other'
   }, [])
 
+  const validHistory = React.useMemo(() => {
+    return history.filter(
+      (record) => record && record.images && record.images.length > 0 && record.status === 'completed'
+    )
+  }, [history])
+
   const filteredHistory = React.useMemo(() => {
-    if (selectedAlbum === 'all') return history
-    return history.filter((record) => {
+    if (selectedAlbum === 'all') return validHistory
+    return validHistory.filter((record) => {
       const category = getResolutionCategory(record.params.width, record.params.height)
       return category === selectedAlbum
     })
-  }, [history, selectedAlbum, getResolutionCategory])
+  }, [validHistory, selectedAlbum, getResolutionCategory])
 
   const albumCounts = React.useMemo(() => {
-    const counts: Record<string, number> = { all: history.length }
-    history.forEach((record) => {
+    const counts: Record<string, number> = { all: validHistory.length }
+    validHistory.forEach((record) => {
       const cat = getResolutionCategory(record.params.width, record.params.height)
       counts[cat] = (counts[cat] || 0) + 1
     })
     return counts
-  }, [history, getResolutionCategory])
+  }, [validHistory, getResolutionCategory])
 
   useEffect(() => {
     let active = true
@@ -60,7 +66,7 @@ export function HistoryView(): React.JSX.Element {
       setLoading(true)
       try {
         const response = await fetch(
-          'http://127.0.0.1:8000/api/v1/generations/history?limit=50&offset=0'
+          'http://127.0.0.1:8000/api/v1/generations/history?limit=200&offset=0'
         )
         if (response.ok && active) {
           const data = await response.json()

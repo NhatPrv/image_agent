@@ -234,6 +234,9 @@ class GenerationService:
                     if not has_valid_image:
                         await self._generation_repo.delete(gen.id)
                         cleaned_count += 1
+                else:
+                    await self._generation_repo.delete(gen.id)
+                    cleaned_count += 1
             if cleaned_count > 0:
                 logger.info("Cleaned up %d orphan generation records missing image files.", cleaned_count)
         except Exception as e:
