@@ -24,13 +24,15 @@ export function HistoryView(): React.JSX.Element {
     []
   )
 
-  const getResolutionCategory = React.useCallback((width: number, height: number): string => {
-    const maxDim = Math.max(width, height)
+  const getResolutionCategory = React.useCallback((width?: number, height?: number): string => {
+    const w = width || 512
+    const h = height || 512
+    const maxDim = Math.max(w, h)
     if (maxDim >= 3840) return '4K_8K'
     if (maxDim >= 2560) return '2K_3K'
     if (maxDim >= 1920) return 'FHD'
 
-    const aspect = width / height
+    const aspect = w / h
     if (aspect < 0.75 && maxDim >= 1000) return 'Mobile'
     if (aspect >= 0.75 && aspect <= 1.34 && maxDim >= 1024) return 'Tablet'
     if (maxDim <= 1024) return 'SD_Standard'
@@ -46,7 +48,10 @@ export function HistoryView(): React.JSX.Element {
   const filteredHistory = React.useMemo(() => {
     if (selectedAlbum === 'all') return validHistory
     return validHistory.filter((record) => {
-      const category = getResolutionCategory(record.params.width, record.params.height)
+      const img = record.images[0]
+      const w = img ? img.width : record.params?.width
+      const h = img ? img.height : record.params?.height
+      const category = getResolutionCategory(w, h)
       return category === selectedAlbum
     })
   }, [validHistory, selectedAlbum, getResolutionCategory])
@@ -54,7 +59,10 @@ export function HistoryView(): React.JSX.Element {
   const albumCounts = React.useMemo(() => {
     const counts: Record<string, number> = { all: validHistory.length }
     validHistory.forEach((record) => {
-      const cat = getResolutionCategory(record.params.width, record.params.height)
+      const img = record.images[0]
+      const w = img ? img.width : record.params?.width
+      const h = img ? img.height : record.params?.height
+      const cat = getResolutionCategory(w, h)
       counts[cat] = (counts[cat] || 0) + 1
     })
     return counts
@@ -62,6 +70,8 @@ export function HistoryView(): React.JSX.Element {
 
   useEffect(() => {
     let active = true
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+
     const fetchHistory = async (): Promise<void> => {
       setLoading(true)
       try {
@@ -71,18 +81,22 @@ export function HistoryView(): React.JSX.Element {
         if (response.ok && active) {
           const data = await response.json()
           setHistory(data)
+          setLoading(false)
+          return
         }
       } catch (err) {
-        console.error('Failed to load generation logs history:', err)
-      } finally {
-        if (active) {
-          setLoading(false)
-        }
+        console.warn('Backend loading, retrying history fetch in 2s...', err)
+      }
+
+      if (active) {
+        retryTimer = setTimeout(fetchHistory, 2000)
       }
     }
+
     fetchHistory()
     return () => {
       active = false
+      if (retryTimer) clearTimeout(retryTimer)
     }
   }, [setHistory])
 
