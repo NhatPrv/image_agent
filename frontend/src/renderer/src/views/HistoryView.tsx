@@ -73,10 +73,9 @@ export function HistoryView(): React.JSX.Element {
     let retryTimer: ReturnType<typeof setTimeout> | null = null
 
     const fetchHistory = async (): Promise<void> => {
-      setLoading(true)
       try {
         const response = await fetch(
-          'http://127.0.0.1:8000/api/v1/generations/history?limit=200&offset=0'
+          'http://127.0.0.1:8000/api/v1/generations/history?limit=100&offset=0'
         )
         if (response.ok && active) {
           const data = await response.json()
@@ -93,6 +92,7 @@ export function HistoryView(): React.JSX.Element {
       }
     }
 
+    setLoading(true)
     fetchHistory()
     return () => {
       active = false

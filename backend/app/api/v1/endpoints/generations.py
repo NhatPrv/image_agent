@@ -78,7 +78,7 @@ async def create_generation(
 
 @router.get("/history", response_model=list[GenerationResponse])
 async def list_history(
-    limit: int = Query(default=50, ge=1, le=100),
+    limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     service: "GenerationService" = Depends(get_generation_service),
 ) -> list[GenerationResponse]:
