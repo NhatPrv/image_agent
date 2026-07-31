@@ -92,6 +92,8 @@ export function GenerateView(): React.JSX.Element {
   const isLoopRunning = useRef(false)
   const prevGenerating = useRef(false)
   const remainingLoopsRef = useRef(0)
+  const initialHistoryChecked = useRef(false)
+  const lastSeenGenId = useRef<string | null>(null)
   const [optimizingPrompt, setOptimizingPrompt] = useState(false)
 
   interface ActiveLoRA {
@@ -141,11 +143,19 @@ export function GenerateView(): React.JSX.Element {
     }
   }, [])
 
-  // Automatically display the latest generated image when history is updated
+  // Automatically display newly generated images in the current session (not past startup history)
   useEffect(() => {
     if (history.length > 0) {
       const latest = history[0]
-      if (latest.status === 'completed' && latest.images.length > 0) {
+      if (!initialHistoryChecked.current) {
+        // Record existing startup history ID so past images are not auto-shown on app launch
+        initialHistoryChecked.current = true
+        lastSeenGenId.current = latest.id
+        return
+      }
+
+      if (latest.id !== lastSeenGenId.current && latest.status === 'completed' && latest.images.length > 0) {
+        lastSeenGenId.current = latest.id
         const imagePath = latest.images[0].path.replace(/\\/g, '/')
         setTimeout(() => {
           setOutputImage(`http://127.0.0.1:8000/outputs/${imagePath}`)
