@@ -90,46 +90,25 @@ export function CanvasMaskEditor({
     }
   }, [isFullscreenModal, imagePath])
 
-  // Calculate 100% exact canvas pixel coordinates (0 to naturalSize.width/height)
+  // Calculate 100% exact canvas pixel coordinates (0 to canvas.width/height)
   const getCanvasCoordinates = useCallback(
-    (clientX: number, clientY: number): { x: number; y: number } | null => {
-      const container = containerRef.current
-      if (!container || naturalSize.width === 0 || naturalSize.height === 0) return null
+    (clientX: number, clientY: number): { x: number; y: number; scaleRatio: number } | null => {
+      const canvas = canvasRef.current
+      if (!canvas || canvas.width === 0 || canvas.height === 0) return null
 
-      const rect = container.getBoundingClientRect()
-      const containerW = rect.width
-      const containerH = rect.height
-      if (containerW === 0 || containerH === 0) return null
+      const rect = canvas.getBoundingClientRect()
+      if (rect.width === 0 || rect.height === 0) return null
 
-      // Object-contain scale factor inside container
-      const baseScale = Math.min(containerW / naturalSize.width, containerH / naturalSize.height)
-      const currentZoom = isFullscreenModal ? zoom : 1.0
-      const currentPan = isFullscreenModal ? pan : { x: 0, y: 0 }
-      const effectiveScale = baseScale * currentZoom
-
-      // Center of container
-      const containerCenterX = containerW / 2
-      const containerCenterY = containerH / 2
-
-      // Displayed image center (with pan offset)
-      const imageCenterX = containerCenterX + currentPan.x
-      const imageCenterY = containerCenterY + currentPan.y
-
-      // Top-left of rendered image inside container
-      const imageLeft = imageCenterX - (naturalSize.width * effectiveScale) / 2
-      const imageTop = imageCenterY - (naturalSize.height * effectiveScale) / 2
-
-      // Mouse relative to container top-left
       const mouseX = clientX - rect.left
       const mouseY = clientY - rect.top
 
-      // Map to actual canvas pixel (0 to naturalSize.width, 0 to naturalSize.height)
-      const canvasX = (mouseX - imageLeft) / effectiveScale
-      const canvasY = (mouseY - imageTop) / effectiveScale
+      const canvasX = (mouseX / rect.width) * canvas.width
+      const canvasY = (mouseY / rect.height) * canvas.height
+      const scaleRatio = canvas.width / rect.width
 
-      return { x: canvasX, y: canvasY }
+      return { x: canvasX, y: canvasY, scaleRatio }
     },
-    [naturalSize, zoom, pan, isFullscreenModal]
+    []
   )
 
   // Trigger mask export
@@ -320,9 +299,8 @@ export function CanvasMaskEditor({
     lastPosRef.current = { x: coords.x, y: coords.y }
     isDrawingRef.current = true
 
-    // Scaled brush size relative to natural image resolution
-    const scaleFactor = naturalSize.width > 0 ? naturalSize.width / 1000 : 1.0
-    const effectiveBrushSize = Math.max(2, brushSize * scaleFactor)
+    // Pixel-perfect brush stroke width matching exact screen brush size
+    const effectiveBrushSize = Math.max(1, brushSize * coords.scaleRatio)
 
     ctx.lineWidth = effectiveBrushSize
     ctx.lineCap = 'round'
@@ -359,6 +337,11 @@ export function CanvasMaskEditor({
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+
+    const effectiveBrushSize = Math.max(1, brushSize * coords.scaleRatio)
+    ctx.lineWidth = effectiveBrushSize
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
 
     if (lastPosRef.current) {
       ctx.beginPath()
