@@ -82,6 +82,38 @@ export function CanvasMaskEditor({
     }
   }, [isFullscreenModal])
 
+  const [mousePos, setMousePos] = useState<{ clientX: number; clientY: number } | null>(null)
+
+  // Dynamically compute exact fitted image dimensions inside container bounds
+  const [displaySize, setDisplaySize] = useState<{ width: number; height: number }>({
+    width: 512,
+    height: 512
+  })
+
+  const updateDisplaySize = useCallback(() => {
+    const container = containerRef.current
+    if (!container || naturalSize.width === 0 || naturalSize.height === 0) return
+
+    const rect = container.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) return
+
+    const scale = Math.min(rect.width / naturalSize.width, rect.height / naturalSize.height)
+    const fitW = Math.max(10, Math.round(naturalSize.width * scale))
+    const fitH = Math.max(10, Math.round(naturalSize.height * scale))
+
+    setDisplaySize({ width: fitW, height: fitH })
+  }, [naturalSize])
+
+  useEffect(() => {
+    updateDisplaySize()
+    const timer = setTimeout(updateDisplaySize, 80)
+    window.addEventListener('resize', updateDisplaySize)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('resize', updateDisplaySize)
+    }
+  }, [updateDisplaySize, isFullscreenModal, imageSrc])
+
   // Reset zoom & pan when exiting fullscreen or changing image
   useEffect(() => {
     if (!isFullscreenModal) {
@@ -319,6 +351,8 @@ export function CanvasMaskEditor({
 
   // Mouse Move for drawing or pan dragging
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>): void => {
+    setMousePos({ clientX: e.clientX, clientY: e.clientY })
+
     if (isPanning) {
       const dx = e.clientX - panStartRef.current.x
       const dy = e.clientY - panStartRef.current.y
@@ -352,6 +386,10 @@ export function CanvasMaskEditor({
     lastPosRef.current = { x: coords.x, y: coords.y }
   }
 
+  const handleMouseEnter = (e: React.MouseEvent<HTMLCanvasElement>): void => {
+    setMousePos({ clientX: e.clientX, clientY: e.clientY })
+  }
+
   // Mouse Up / Leave
   const handleMouseUp = (): void => {
     if (isPanning) {
@@ -365,6 +403,11 @@ export function CanvasMaskEditor({
       saveHistory()
       exportMask()
     }
+  }
+
+  const handleMouseLeave = (): void => {
+    setMousePos(null)
+    handleMouseUp()
   }
 
   const content = (
@@ -507,8 +550,10 @@ export function CanvasMaskEditor({
       >
         {imagePath ? (
           <div
-            className="relative w-full h-full flex items-center justify-center pointer-events-auto"
+            className="relative flex items-center justify-center pointer-events-auto shrink-0"
             style={{
+              width: `${displaySize.width}px`,
+              height: `${displaySize.height}px`,
               transform: isFullscreenModal ? `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` : 'none',
               transformOrigin: 'center center',
               transition: isPanning ? 'none' : 'transform 0.05s ease-out'
@@ -519,7 +564,7 @@ export function CanvasMaskEditor({
             <img
               src={imageSrc || ''}
               alt="Base for inpaint"
-              className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+              className="absolute inset-0 w-full h-full object-fill pointer-events-none select-none"
             />
 
             {/* Drawing Layer */}
@@ -528,8 +573,9 @@ export function CanvasMaskEditor({
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-              className="absolute inset-0 w-full h-full object-contain cursor-crosshair z-10 opacity-85"
+              onMouseEnter={handleMouseEnter}
+              onMouseLeave={handleMouseLeave}
+              className="absolute inset-0 w-full h-full object-fill cursor-none z-10 opacity-85"
             />
           </div>
         ) : (
@@ -563,6 +609,19 @@ export function CanvasMaskEditor({
             </span>
           )}
         </div>
+      )}
+
+      {/* Visual Red Circle Brush Indicator Following Mouse */}
+      {mousePos && !isPanning && (
+        <div
+          className="pointer-events-none fixed rounded-full border-2 border-red-500 bg-red-500/30 z-50 -translate-x-1/2 -translate-y-1/2 shadow-sm shadow-red-500/50"
+          style={{
+            left: `${mousePos.clientX}px`,
+            top: `${mousePos.clientY}px`,
+            width: `${brushSize}px`,
+            height: `${brushSize}px`
+          }}
+        />
       )}
     </div>
   )
