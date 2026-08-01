@@ -618,8 +618,8 @@ export function CanvasMaskEditor({
           style={{
             left: `${mousePos.clientX}px`,
             top: `${mousePos.clientY}px`,
-            width: `${brushSize}px`,
-            height: `${brushSize}px`
+            width: `${brushSize * (isFullscreenModal ? zoom : 1.0)}px`,
+            height: `${brushSize * (isFullscreenModal ? zoom : 1.0)}px`
           }}
         />
       )}
