@@ -241,6 +241,37 @@ export function CanvasMaskEditor({
     setCanUndo(historyRef.current.length > 1)
   }
 
+  // Restore current drawn mask state onto canvas (preserves drawing when toggling fullscreen/modal)
+  const restoreCanvasState = useCallback(() => {
+    const canvas = canvasRef.current
+    if (!canvas || naturalSize.width === 0 || naturalSize.height === 0) return
+
+    canvas.width = naturalSize.width
+    canvas.height = naturalSize.height
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+
+    if (historyRef.current.length > 0) {
+      const latestSnapshot = historyRef.current[historyRef.current.length - 1]
+      const img = new Image()
+      img.onload = (): void => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        ctx.drawImage(img, 0, 0)
+      }
+      img.src = latestSnapshot
+    }
+  }, [naturalSize])
+
+  // Restore drawing state when fullscreen modal status changes or naturalSize updates
+  useEffect(() => {
+    restoreCanvasState()
+    const timer = setTimeout(restoreCanvasState, 50)
+    return () => clearTimeout(timer)
+  }, [isFullscreenModal, naturalSize, restoreCanvasState])
+
   // Convert local imagePath to base64 data URL via IPC & set natural resolution
   useEffect(() => {
     if (imagePath) {
