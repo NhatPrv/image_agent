@@ -189,8 +189,9 @@ class InpaintPipeline(BaseDiffusionPipeline):
                     input_image = PILImage.new("RGB", (target_w, target_h), (0, 0, 0))
                     input_image.paste(resized_init, (pad_x, pad_y))
 
-                    # Process mask image to strictly match padded input_image coordinates
-                    resized_mask = mask_img.convert("L").resize((new_w, new_h), PILImage.Resampling.LANCZOS)
+                    # Process mask image with NEAREST resampling & binary threshold to prevent fuzzy color bleed
+                    resized_mask = mask_img.convert("L").resize((new_w, new_h), PILImage.Resampling.NEAREST)
+                    resized_mask = resized_mask.point(lambda p: 255 if p > 128 else 0)
                     mask_image = PILImage.new("L", (target_w, target_h), 0)
                     mask_image.paste(resized_mask, (pad_x, pad_y))
 
@@ -285,7 +286,6 @@ class InpaintPipeline(BaseDiffusionPipeline):
                 output = self.pipeline(**pipe_kwargs)
 
                 # Composite the generated images onto original high-res input image
-                from PIL import ImageFilter
                 composited_images = []
                 orig_w, orig_h = orig_img.size
 
@@ -305,10 +305,10 @@ class InpaintPipeline(BaseDiffusionPipeline):
                     # 4. Resize cropped inpaint result back to original image size
                     result_orig_size = cropped_result.resize((orig_w, orig_h), PILImage.Resampling.LANCZOS)
 
-                    # 5. Composite onto original photo with subtle Gaussian blur mask feathering
-                    orig_mask_resized = mask_image.crop(bbox).resize((orig_w, orig_h), PILImage.Resampling.LANCZOS)
-                    feathered_mask = orig_mask_resized.filter(ImageFilter.GaussianBlur(radius=2))
-                    final_composite = PILImage.composite(result_orig_size, orig_img, feathered_mask)
+                    # 5. Composite onto original photo with strict binary mask to eliminate any color bleed
+                    orig_mask_resized = mask_image.crop(bbox).resize((orig_w, orig_h), PILImage.Resampling.NEAREST)
+                    binary_mask = orig_mask_resized.point(lambda p: 255 if p > 128 else 0)
+                    final_composite = PILImage.composite(result_orig_size, orig_img, binary_mask)
 
                     composited_images.append(final_composite)
                 return composited_images
