@@ -124,7 +124,7 @@ export function CanvasMaskEditor({
 
   // Calculate 100% exact canvas pixel coordinates (0 to canvas.width/height)
   const getCanvasCoordinates = useCallback(
-    (clientX: number, clientY: number): { x: number; y: number; scaleRatio: number } | null => {
+    (clientX: number, clientY: number): { x: number; y: number } | null => {
       const canvas = canvasRef.current
       if (!canvas || canvas.width === 0 || canvas.height === 0) return null
 
@@ -136,9 +136,8 @@ export function CanvasMaskEditor({
 
       const canvasX = (mouseX / rect.width) * canvas.width
       const canvasY = (mouseY / rect.height) * canvas.height
-      const scaleRatio = canvas.width / rect.width
 
-      return { x: canvasX, y: canvasY, scaleRatio }
+      return { x: canvasX, y: canvasY }
     },
     []
   )
@@ -331,8 +330,9 @@ export function CanvasMaskEditor({
     lastPosRef.current = { x: coords.x, y: coords.y }
     isDrawingRef.current = true
 
-    // Pixel-perfect brush stroke width matching exact screen brush size
-    const effectiveBrushSize = Math.max(1, brushSize * coords.scaleRatio)
+    // Constant unzoomed scale ratio mapping screen brush pixels to internal canvas pixels
+    const baseScale = displaySize.width > 0 ? canvas.width / displaySize.width : 1.0
+    const effectiveBrushSize = Math.max(1, brushSize * baseScale)
 
     ctx.lineWidth = effectiveBrushSize
     ctx.lineCap = 'round'
@@ -372,7 +372,8 @@ export function CanvasMaskEditor({
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const effectiveBrushSize = Math.max(1, brushSize * coords.scaleRatio)
+    const baseScale = displaySize.width > 0 ? canvas.width / displaySize.width : 1.0
+    const effectiveBrushSize = Math.max(1, brushSize * baseScale)
     ctx.lineWidth = effectiveBrushSize
     ctx.lineCap = 'round'
     ctx.lineJoin = 'round'
