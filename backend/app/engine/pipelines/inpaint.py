@@ -226,6 +226,10 @@ class InpaintPipeline(BaseDiffusionPipeline):
         total_steps = params.steps
         start_time = None
 
+        # Calculate actual steps executed (based on denoise strength)
+        strength = params.denoise_strength if params.denoise_strength is not None else 1.0
+        actual_steps = max(1, int(total_steps * strength))
+
         def _step_callback(
             _pipe_self,
             step: int,
@@ -239,15 +243,15 @@ class InpaintPipeline(BaseDiffusionPipeline):
             if progress_callback:
                 elapsed_ms = int((time.perf_counter() - start_time) * 1000.0)
                 avg_step_time = (elapsed_ms / step) if step > 0 else 0
-                est_remaining_ms = int(avg_step_time * (total_steps - step))
-                percent = (step / total_steps) * 100.0
+                est_remaining_ms = int(avg_step_time * max(0, actual_steps - step))
+                percent = min(99.0, (step / actual_steps) * 100.0)
 
                 from app.core.entities.generation import GenerationProgress as ProgressEntity
 
                 progress_data = ProgressEntity(
                     generation_id=generation_id,
                     current_step=step,
-                    total_steps=total_steps,
+                    total_steps=actual_steps,
                     progress_percent=percent,
                     elapsed_ms=elapsed_ms,
                     estimated_remaining_ms=est_remaining_ms,
