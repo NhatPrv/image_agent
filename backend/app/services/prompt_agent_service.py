@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Common Vietnamese-to-English translation mapping for image editing & generation
 VIETNAMESE_DICTIONARY: dict[str, str] = {
+    "hiệu ứng đóng băng": "frosted ice crystallization effect, frozen ice texture",
+    "đóng băng": "frosted ice texture, frozen ice effect",
+    "băng giá": "frosty ice texture",
+    "quả bóng nước": "crystal water sphere droplet",
+    "quả bóng": "crystal sphere",
     "giọt nước": "crystal water droplet",
     "quả cầu": "glass sphere",
     "quả cầu pha lê": "transparent crystal glass sphere",
