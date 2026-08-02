@@ -316,11 +316,34 @@ export function GenerateView(): React.JSX.Element {
       }
     }
 
-    const effectivePrompt = (type === 'upscale' && (!prompt || !prompt.trim())) ? 'masterpiece' : (prompt && prompt.trim() ? prompt : 'masterpiece')
+    let effectivePrompt = (type === 'upscale' && (!prompt || !prompt.trim())) ? 'masterpiece' : (prompt && prompt.trim() ? prompt : 'masterpiece')
+    let effectiveNegative = negativePrompt || ''
+
+    // Automatically parse natural language / Vietnamese conversational input using Agent Prompt Service
+    if (prompt && (/[àáảãạâầấẩẫậăằắẳẵặèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i.test(prompt) || prompt.split(' ').length >= 4)) {
+      try {
+        const agentRes = await fetch('http://127.0.0.1:8000/api/v1/agent/parse-prompt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt })
+        })
+        if (agentRes.ok) {
+          const parsed = await agentRes.json()
+          if (parsed.positive_prompt) {
+            effectivePrompt = parsed.positive_prompt
+            if (!effectiveNegative && parsed.negative_prompt) {
+              effectiveNegative = parsed.negative_prompt
+            }
+          }
+        }
+      } catch (agentErr) {
+        console.warn('Agent prompt parsing fallback to raw input:', agentErr)
+      }
+    }
 
     const payload = {
       prompt: effectivePrompt,
-      negative_prompt: negativePrompt || '',
+      negative_prompt: effectiveNegative,
       width,
       height,
       steps,

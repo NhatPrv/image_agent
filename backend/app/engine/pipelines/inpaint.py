@@ -174,37 +174,35 @@ class InpaintPipeline(BaseDiffusionPipeline):
                     orig_img = init_img.convert("RGB")
                     orig_w, orig_h = orig_img.size
 
-                    target_w = params.width
-                    target_h = params.height
+                    # Calculate target processing dimensions preserving native aspect ratio
+                    # Rounded to 64-pixel multiples to avoid SD latent dimension distortion & letterbox padding
+                    max_dim = max(params.width, params.height, 512)
+                    aspect_ratio = orig_w / orig_h
 
-                    # Calculate aspect-ratio preserving containment matching frontend CSS object-contain
-                    scale = min(target_w / orig_w, target_h / orig_h)
-                    new_w = max(1, int(orig_w * scale))
-                    new_h = max(1, int(orig_h * scale))
-                    pad_x = (target_w - new_w) // 2
-                    pad_y = (target_h - new_h) // 2
-                    bbox = (pad_x, pad_y, pad_x + new_w, pad_y + new_h)
+                    if aspect_ratio >= 1.0:
+                        target_w = max(64, int(round(max_dim / 64.0)) * 64)
+                        target_h = max(64, int(round((max_dim / aspect_ratio) / 64.0)) * 64)
+                    else:
+                        target_h = max(64, int(round(max_dim / 64.0)) * 64)
+                        target_w = max(64, int(round((max_dim * aspect_ratio) / 64.0)) * 64)
 
-                    resized_init = orig_img.resize((new_w, new_h), PILImage.Resampling.LANCZOS)
-                    input_image = PILImage.new("RGB", (target_w, target_h), (0, 0, 0))
-                    input_image.paste(resized_init, (pad_x, pad_y))
+                    # Resize directly to target_w x target_h matching native aspect ratio 100%
+                    input_image = orig_img.resize((target_w, target_h), PILImage.Resampling.LANCZOS)
 
-                    # Process mask image with NEAREST resampling & binary threshold to prevent fuzzy color bleed
-                    resized_mask = mask_img.convert("L").resize((new_w, new_h), PILImage.Resampling.NEAREST)
-                    resized_mask = resized_mask.point(lambda p: 255 if p > 128 else 0)
-                    mask_image = PILImage.new("L", (target_w, target_h), 0)
-                    mask_image.paste(resized_mask, (pad_x, pad_y))
+                    # Process mask image with NEAREST resampling & binary threshold to match target_w x target_h
+                    resized_mask = mask_img.convert("L").resize((target_w, target_h), PILImage.Resampling.NEAREST)
+                    mask_image = resized_mask.point(lambda p: 255 if p > 128 else 0)
 
-                    return orig_img, input_image, mask_image, bbox
+                    return orig_img, input_image, mask_image
 
-            orig_img, input_image, mask_image, bbox = await loop.run_in_executor(None, _load_images)
+            orig_img, input_image, mask_image = await loop.run_in_executor(None, _load_images)
         except Exception as e:
             logger.error("Failed to load or process input/mask images: %s", str(e))
             msg = f"Failed processing inpaint images: {e}"
             raise GenerationError(msg) from e
 
         # ─── 1.5 Apply dynamic high-resolution VRAM optimizations ───
-        self.apply_high_res_optimizations(params.width, params.height)
+        self.apply_high_res_optimizations(input_image.width, input_image.height)
 
         # ─── 2. Configure Scheduler ───
         self.pipeline.scheduler = SchedulerFactory.create(
@@ -261,10 +259,12 @@ class InpaintPipeline(BaseDiffusionPipeline):
 
         # ─── 5. Inference execution ───
         logger.info(
-            "Executing Inpainting | Prompt: '%s' | Size: %dx%d",
+            "Executing Inpainting | Prompt: '%s' | Native Size: %dx%d -> Target Processing: %dx%d",
             params.prompt,
-            params.width,
-            params.height,
+            orig_img.width,
+            orig_img.height,
+            input_image.width,
+            input_image.height,
         )
 
         try:
@@ -289,32 +289,22 @@ class InpaintPipeline(BaseDiffusionPipeline):
 
                 output = self.pipeline(**pipe_kwargs)
 
-                # Composite the generated images onto original high-res input image
+                # Composite generated images onto original high-res photo with 100% native aspect ratio
                 composited_images = []
                 orig_w, orig_h = orig_img.size
 
                 for gen_img in output.images:
-                    # 1. Match gen_img size to target input_image size if needed
-                    if gen_img.size != input_image.size:
-                        gen_img_resized = gen_img.resize(input_image.size, PILImage.Resampling.LANCZOS)
-                    else:
-                        gen_img_resized = gen_img
+                    # 1. Resize generated inpaint image directly back to original photo size
+                    result_orig_size = gen_img.resize((orig_w, orig_h), PILImage.Resampling.LANCZOS)
 
-                    # 2. Composite gen_img with padded input_image at target size
-                    composited_padded = PILImage.composite(gen_img_resized, input_image, mask_image)
-
-                    # 3. Crop back to the inner image region (removing letterbox padding)
-                    cropped_result = composited_padded.crop(bbox)
-
-                    # 4. Resize cropped inpaint result back to original image size
-                    result_orig_size = cropped_result.resize((orig_w, orig_h), PILImage.Resampling.LANCZOS)
-
-                    # 5. Composite onto original photo with strict binary mask to eliminate any color bleed
-                    orig_mask_resized = mask_image.crop(bbox).resize((orig_w, orig_h), PILImage.Resampling.NEAREST)
+                    # 2. Resize mask image to original photo size with strict binary threshold
+                    orig_mask_resized = mask_image.resize((orig_w, orig_h), PILImage.Resampling.NEAREST)
                     binary_mask = orig_mask_resized.point(lambda p: 255 if p > 128 else 0)
-                    final_composite = PILImage.composite(result_orig_size, orig_img, binary_mask)
 
+                    # 3. Composite onto original photo so unmasked region is 100% untouched original photo
+                    final_composite = PILImage.composite(result_orig_size, orig_img, binary_mask)
                     composited_images.append(final_composite)
+
                 return composited_images
 
             return await loop.run_in_executor(None, _run_inference)

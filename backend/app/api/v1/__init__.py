@@ -6,6 +6,7 @@ Combines routers from various domains into a single API surface.
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
+    agent,
     downloads,
     generations,
     models,
@@ -32,4 +33,5 @@ router.include_router(queue.router)
 router.include_router(settings.router)
 router.include_router(system.router)
 router.include_router(downloads.router)
+router.include_router(agent.router, prefix="/agent", tags=["Agent"])
 # Note: websocket.router is mounted directly at root /ws in main.py
