@@ -185,6 +185,9 @@ class AIEngineManager(IAIEngine):
 
             duration_ms = int((time.perf_counter() - start_time) * 1000.0)
 
+            # Clean PyTorch memory cache to release intermediate activation tensors back to OS
+            self._vram_manager.clean_memory()
+
             return output_paths
 
         except Exception as e:
