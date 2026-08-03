@@ -206,122 +206,93 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
         start_time = None
 
         if is_high_res:
-            import numpy as np
-
-            # Detect if pipeline is SDXL to use optimal tile size
-            is_sdxl = isinstance(self.pipeline, StableDiffusionXLImg2ImgPipeline)
-            default_tile = 1024 if is_sdxl else 512
-
-            # Configure grid for Tiled Img2Img
-            tile_size = min(default_tile, params.width, params.height)
-            tile_size = max(64, (tile_size // 8) * 8)
-
-            # Enforce 25% overlap for smooth blending
-            overlap = tile_size // 4
-            overlap = max(8, (overlap // 8) * 8)
-
-            def get_grid_coords(total_size: int, tile_s: int, over: int) -> list[int]:
-                if total_size <= tile_s:
-                    return [0]
-                coords = []
-                c = 0
-                stride = tile_s - over
-                while c + tile_s < total_size:
-                    coords.append(c)
-                    c += stride
-                coords.append(total_size - tile_s)
-                return coords
-
-            x_coords = get_grid_coords(params.width, tile_size, overlap)
-            y_coords = get_grid_coords(params.height, tile_size, overlap)
-            total_tiles = len(x_coords) * len(y_coords)
-
-            # Create 2D feather mask for seamless blending
-            mask = np.ones((tile_size, tile_size), dtype=np.float32)
-            # Smooth linear gradient across the entire overlap region
-            for i in range(overlap):
-                val = i / overlap
-                mask[i, :] *= val
-                mask[-1 - i, :] *= val
-                mask[:, i] *= val
-                mask[:, -1 - i] *= val
-            mask_3d = np.expand_dims(mask, axis=-1)
-
-            # Calculate actual steps executed per tile (based on denoise strength)
-            actual_steps = max(1, int(params.steps * denoise_strength))
-            combined_total_steps = total_tiles * actual_steps
-
-            # ─── 5. Inference execution (Tiled) ───
-            logger.info(
-                "Executing Tiled Image-to-Image | Prompt: '%s' | Strength: %.2f | Size: %dx%d (Tiles: %d, Steps Per Tile: %d)",
-                prompt,
-                denoise_strength,
-                params.width,
-                params.height,
-                total_tiles,
-                actual_steps,
-            )
-
             try:
+                import numpy as np
+
+                # Detect if pipeline is SDXL to use optimal tile size
+                is_sdxl = isinstance(self.pipeline, StableDiffusionXLImg2ImgPipeline)
+                default_tile = 1024 if is_sdxl else 512
+
+                # Configure grid for Tiled Img2Img
+                tile_size = min(default_tile, params.width, params.height)
+                tile_size = max(64, (tile_size // 8) * 8)
+
+                # Enforce 25% overlap for smooth blending
+                overlap = tile_size // 4
+
+                # Helper to calculate grid coordinates
+                def get_grid_coords(total_size: int, tile_s: int, ov: int) -> list[int]:
+                    if total_size <= tile_s:
+                        return [0]
+                    stride = tile_s - ov
+                    coords = []
+                    c = 0
+                    while c + tile_s < total_size:
+                        coords.append(c)
+                        c += stride
+                    coords.append(total_size - tile_s)
+                    return coords
+
+                x_coords = get_grid_coords(params.width, tile_size, overlap)
+                y_coords = get_grid_coords(params.height, tile_size, overlap)
+                total_tiles = len(x_coords) * len(y_coords)
+
+                # Create 2D feather mask for seamless blending
+                mask = np.ones((tile_size, tile_size), dtype=np.float32)
+                # Smooth linear gradient across the entire overlap region
+                for i in range(overlap):
+                    val = i / overlap
+                    mask[i, :] *= val
+                    mask[-1 - i, :] *= val
+                    mask[:, i] *= val
+                    mask[:, -1 - i] *= val
+                mask_3d = np.expand_dims(mask, axis=-1)
+
+                # Calculate actual steps executed per tile (based on denoise strength)
+                actual_steps = max(1, int(params.steps * denoise_strength))
+                combined_total_steps = total_tiles * actual_steps
+
+                # ─── 5. Inference execution (Tiled) ───
+                logger.info(
+                    "Executing Tiled Image-to-Image | Prompt: '%s' | Strength: %.2f | Size: %dx%d (Tiles: %d, Steps Per Tile: %d)",
+                    prompt,
+                    denoise_strength,
+                    params.width,
+                    params.height,
+                    total_tiles,
+                    actual_steps,
+                )
 
                 def _run_tiled_inference():
-                    # Initialize accumulator canvas
-                    canvas = np.zeros((params.height, params.width, 3), dtype=np.float32)
-                    weights = np.zeros((params.height, params.width, 1), dtype=np.float32)
-                    img_np = np.array(input_image).astype(np.float32) / 255.0
+                    img_np = np.array(input_image).astype(np.float32)
+                    canvas = np.zeros_like(img_np, dtype=np.float32)
+                    weights = np.zeros_like(img_np, dtype=np.float32)
 
                     t_idx = 0
                     for y in y_coords:
                         for x in x_coords:
-                            # Crop tile from input image
-                            tile_np = img_np[y : y + tile_size, x : x + tile_size, :3]
-                            tile_img = PILImage.fromarray((tile_np * 255.0).astype(np.uint8))
+                            tile_box = (x, y, x + tile_size, y + tile_size)
+                            tile_input = input_image.crop(tile_box)
 
-                            # Bind local callback for this tile index
-                            def _local_callback(
-                                pipe_self,
-                                step,
-                                timestep,
-                                callback_kwargs,
-                                current_t_idx=t_idx,
-                            ):
+                            # Tiled step callback
+                            def _local_callback(_pipe_self, step: int, _timestep: int, callback_kwargs: dict[str, Any]) -> dict[str, Any]:
                                 nonlocal start_time
                                 if start_time is None:
                                     start_time = time.perf_counter()
 
                                 if progress_callback:
-                                    # step is 0-indexed loop step index (0 to actual_steps - 1)
-                                    current_step = step + 1
-                                    current_combined_step = current_t_idx * actual_steps + current_step
+                                    tile_step_count = step + 1
+                                    overall_current_step = (t_idx * actual_steps) + tile_step_count
                                     elapsed_ms = int((time.perf_counter() - start_time) * 1000.0)
-                                    avg_step_time = (
-                                        (elapsed_ms / current_combined_step)
-                                        if current_combined_step > 0
-                                        else 0
-                                    )
-                                    est_remaining_ms = int(
-                                        avg_step_time * (combined_total_steps - current_combined_step)
-                                    )
-                                    percent = min(100.0, (current_combined_step / combined_total_steps) * 100.0)
+                                    avg_step_time = (elapsed_ms / overall_current_step) if overall_current_step > 0 else 0
+                                    est_remaining_ms = int(avg_step_time * (combined_total_steps - overall_current_step))
+                                    percent = min(100.0, (overall_current_step / combined_total_steps) * 100.0)
 
-                                    logger.info(
-                                        "Tiled Img2Img Tile %d/%d, Step %d/%d (%.1f%%) | Elapsed: %dms | Est. Remaining: %dms",
-                                        current_t_idx + 1,
-                                        total_tiles,
-                                        current_step,
-                                        actual_steps,
-                                        percent,
-                                        elapsed_ms,
-                                        est_remaining_ms,
-                                    )
-
-                                    from app.core.entities.generation import (
-                                        GenerationProgress as ProgressEntity,
-                                    )
+                                    from app.core.entities.generation import GenerationProgress as ProgressEntity
 
                                     progress_data = ProgressEntity(
                                         generation_id=generation_id,
-                                        current_step=current_combined_step,
+                                        current_step=overall_current_step,
                                         total_steps=combined_total_steps,
                                         progress_percent=percent,
                                         elapsed_ms=elapsed_ms,
@@ -330,11 +301,10 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
                                     progress_callback(progress_data)
                                 return callback_kwargs
 
-                            # Denoise tile
                             output = self.pipeline(
                                 prompt=prompt,
                                 negative_prompt=negative_prompt,
-                                image=tile_img,
+                                image=tile_input,
                                 strength=denoise_strength,
                                 num_inference_steps=params.steps,
                                 guidance_scale=params.cfg_scale,
@@ -343,8 +313,7 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
                                 callback_on_step_end=_local_callback,
                                 callback_on_step_end_tensor_inputs=["latents"],
                             )
-
-                            output_tile = np.array(output.images[0]).astype(np.float32) / 255.0
+                            output_tile = np.array(output.images[0]).astype(np.float32)
 
                             # Accumulate
                             canvas[y : y + tile_size, x : x + tile_size, :3] += output_tile * mask_3d
@@ -353,7 +322,7 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
 
                     # Blend and normalize grid
                     final_np = np.where(weights > 0, canvas / weights, img_np)
-                    final_np = np.clip(final_np * 255.0, 0, 255).astype(np.uint8)
+                    final_np = np.clip(final_np, 0, 255).astype(np.uint8)
                     return [PILImage.fromarray(final_np)]
 
                 return await loop.run_in_executor(None, _run_tiled_inference)
@@ -362,79 +331,79 @@ class Img2ImgPipeline(BaseDiffusionPipeline):
                 msg = f"Tiled inference execution failed: {e}"
                 raise GenerationError(msg) from e
 
-            # Calculate actual steps executed in Img2Img (based on denoise strength)
-            actual_steps = max(1, int(params.steps * denoise_strength))
+        # Calculate actual steps executed in Img2Img (based on denoise strength)
+        actual_steps = max(1, int(params.steps * denoise_strength))
 
-            # ─── Standard Progress Tracking Callback ───
-            def _step_callback(
-                _pipe_self,
-                step: int,
-                _timestep: int,
-                callback_kwargs: dict[str, Any],
-            ) -> dict[str, Any]:
-                nonlocal start_time
-                if start_time is None:
-                    start_time = time.perf_counter()
+        # ─── Standard Progress Tracking Callback ───
+        def _step_callback(
+            _pipe_self,
+            step: int,
+            _timestep: int,
+            callback_kwargs: dict[str, Any],
+        ) -> dict[str, Any]:
+            nonlocal start_time
+            if start_time is None:
+                start_time = time.perf_counter()
 
-                if progress_callback:
-                    # In diffusers img2img, step is 0-indexed loop counter (0 to actual_steps - 1)
-                    current_step = step + 1
-                    elapsed_ms = int((time.perf_counter() - start_time) * 1000.0)
-                    avg_step_time = (elapsed_ms / current_step) if current_step > 0 else 0
-                    est_remaining_ms = int(avg_step_time * (actual_steps - current_step))
-                    percent = min(100.0, (current_step / actual_steps) * 100.0)
+            if progress_callback:
+                # In diffusers img2img, step is 0-indexed loop counter (0 to actual_steps - 1)
+                current_step = step + 1
+                elapsed_ms = int((time.perf_counter() - start_time) * 1000.0)
+                avg_step_time = (elapsed_ms / current_step) if current_step > 0 else 0
+                est_remaining_ms = int(avg_step_time * (actual_steps - current_step))
+                percent = min(100.0, (current_step / actual_steps) * 100.0)
 
-                    logger.info(
-                        "Img2Img step %d/%d (%.1f%%) | Elapsed: %dms | Est. Remaining: %dms",
-                        current_step,
-                        actual_steps,
-                        percent,
-                        elapsed_ms,
-                        est_remaining_ms,
-                    )
+                logger.info(
+                    "Img2Img step %d/%d (%.1f%%) | Elapsed: %dms | Est. Remaining: %dms",
+                    current_step,
+                    actual_steps,
+                    percent,
+                    elapsed_ms,
+                    est_remaining_ms,
+                )
 
-                    from app.core.entities.generation import GenerationProgress as ProgressEntity
+                from app.core.entities.generation import GenerationProgress as ProgressEntity
 
-                    progress_data = ProgressEntity(
-                        generation_id=generation_id,
-                        current_step=current_step,
-                        total_steps=actual_steps,
-                        progress_percent=percent,
-                        elapsed_ms=elapsed_ms,
-                        estimated_remaining_ms=est_remaining_ms,
-                    )
-                    progress_callback(progress_data)
-                return callback_kwargs
+                progress_data = ProgressEntity(
+                    generation_id=generation_id,
+                    current_step=current_step,
+                    total_steps=actual_steps,
+                    progress_percent=percent,
+                    elapsed_ms=elapsed_ms,
+                    estimated_remaining_ms=est_remaining_ms,
+                )
+                progress_callback(progress_data)
+            return callback_kwargs
 
-            # ─── 5. Inference execution (Standard) ───
-            logger.info(
-                "Executing Standard Image-to-Image | Prompt: '%s' | Strength: %.2f | Size: %dx%d (Steps: %d)",
-                prompt,
-                denoise_strength,
-                params.width,
-                params.height,
-                actual_steps,
-            )
+        # ─── 5. Inference execution (Standard) ───
+        logger.info(
+            "Executing Standard Image-to-Image | Prompt: '%s' | Strength: %.2f | Size: %dx%d (Steps: %d)",
+            prompt,
+            denoise_strength,
+            params.width,
+            params.height,
+            actual_steps,
+        )
 
-            try:
+        try:
 
-                def _run_inference():
-                    output = self.pipeline(
-                        prompt=prompt,
-                        negative_prompt=negative_prompt,
-                        image=input_image,
-                        strength=denoise_strength,
-                        num_inference_steps=params.steps,
-                        guidance_scale=params.cfg_scale,
-                        generator=generator,
-                        num_images_per_prompt=params.batch_size,
-                        callback_on_step_end=_step_callback,
-                        callback_on_step_end_tensor_inputs=["latents"],
-                    )
-                    return output.images
+            def _run_inference():
+                output = self.pipeline(
+                    prompt=prompt,
+                    negative_prompt=negative_prompt,
+                    image=input_image,
+                    strength=denoise_strength,
+                    num_inference_steps=params.steps,
+                    guidance_scale=params.cfg_scale,
+                    generator=generator,
+                    num_images_per_prompt=params.batch_size,
+                    callback_on_step_end=_step_callback,
+                    callback_on_step_end_tensor_inputs=["latents"],
+                )
+                return output.images
 
-                return await loop.run_in_executor(None, _run_inference)
-            except Exception as e:
-                logger.error("Error during inference execution: %s", str(e))
-                msg = f"Inference execution failed: {e}"
-                raise GenerationError(msg) from e
+            return await loop.run_in_executor(None, _run_inference)
+        except Exception as e:
+            logger.error("Error during inference execution: %s", str(e))
+            msg = f"Inference execution failed: {e}"
+            raise GenerationError(msg) from e
