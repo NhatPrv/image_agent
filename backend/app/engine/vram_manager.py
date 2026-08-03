@@ -146,16 +146,14 @@ class VRAMManager:
             )
 
     def clean_memory(self) -> None:
-        """Clean PyTorch memory cache and garbage collect unused tensors.
+        """Clean PyTorch memory cache and garbage collect unused tensors from Host RAM & VRAM.
 
-        Forces release of cached CUDA blocks back to the OS.
+        Forces release of cached CUDA blocks and unreferenced Python memory back to OS.
         """
-        if not torch.cuda.is_available():
-            return
-
-        logger.debug("Executing PyTorch garbage collection and clearing CUDA cache.")
+        logger.debug("Executing deep system RAM & CUDA VRAM memory purge.")
         gc.collect()
-        torch.cuda.empty_cache()
-
-        # Reset peak memory stats to start tracking clean
-        torch.cuda.reset_peak_memory_stats()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            with contextlib.suppress(Exception):
+                torch.cuda.ipc_collect()
+            torch.cuda.reset_peak_memory_stats()

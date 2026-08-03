@@ -29,3 +29,19 @@ async def get_system_info(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed retrieving system info: {e}",
         ) from e
+
+
+@router.post("/clean-memory")
+async def clean_memory() -> dict[str, str]:
+    """Force deep garbage collection and release unused system RAM & CUDA VRAM back to OS."""
+    import contextlib
+    import gc
+    import torch
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        with contextlib.suppress(Exception):
+            torch.cuda.ipc_collect()
+
+    return {"status": "ok", "message": "System RAM and VRAM successfully purged."}
