@@ -41,3 +41,19 @@ async def parse_prompt(request: PromptParseRequest) -> PromptParseResponse:
         detected_language=result.detected_language,
         extracted_keywords=result.extracted_keywords,
     )
+
+
+class OllamaEnhanceRequest(BaseModel):
+    prompt: str = Field(..., description="Natural language prompt in Vietnamese or English")
+    model: str = Field(default="dolphin-llama3:8b", description="Uncensored Ollama model name")
+
+
+class OllamaEnhanceResponse(BaseModel):
+    enhanced_prompt: str
+
+
+@router.post("/enhance-ollama", response_model=OllamaEnhanceResponse)
+async def enhance_ollama(request: OllamaEnhanceRequest) -> OllamaEnhanceResponse:
+    """Enhance user prompt using local Uncensored Ollama model."""
+    enhanced = await prompt_agent_service.enhance_with_ollama(request.prompt, model_name=request.model)
+    return OllamaEnhanceResponse(enhanced_prompt=enhanced)
