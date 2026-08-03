@@ -18,6 +18,7 @@ prompt_agent_service = PromptAgentService()
 class PromptParseRequest(BaseModel):
     """Request payload for natural language prompt parsing."""
     prompt: str = Field(..., description="Natural language prompt in Vietnamese or English")
+    mode: str = Field(default="txt2img", description="Generation mode: txt2img, img2img, inpaint, upscale")
 
 
 class PromptParseResponse(BaseModel):
@@ -32,7 +33,7 @@ class PromptParseResponse(BaseModel):
 @router.post("/parse-prompt", response_model=PromptParseResponse)
 async def parse_prompt(request: PromptParseRequest) -> PromptParseResponse:
     """Parse a natural language prompt into positive and negative prompts."""
-    result = prompt_agent_service.parse_prompt(request.prompt)
+    result = prompt_agent_service.parse_prompt(request.prompt, mode=request.mode)
     return PromptParseResponse(
         raw_input=result.raw_input,
         positive_prompt=result.positive_prompt,

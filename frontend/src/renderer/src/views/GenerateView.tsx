@@ -325,7 +325,7 @@ export function GenerateView(): React.JSX.Element {
         const agentRes = await fetch('http://127.0.0.1:8000/api/v1/agent/parse-prompt', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt })
+          body: JSON.stringify({ prompt, mode: type })
         })
         if (agentRes.ok) {
           const parsed = await agentRes.json()

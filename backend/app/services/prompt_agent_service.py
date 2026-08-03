@@ -43,8 +43,25 @@ VIETNAMESE_DICTIONARY: dict[str, str] = {
     "sắc nét": "sharp focus highly detailed",
 }
 
-DEFAULT_QUALITY_POSITIVE = "masterpiece, photorealistic, 8k resolution, highly detailed, sharp focus, professional photography"
-DEFAULT_NEGATIVE = "blurry, low quality, noise, out of focus, deformed, ugly, bad anatomy, distorted"
+# Mode-specific prompt booster configurations
+MODE_BOOSTERS: dict[str, dict[str, str]] = {
+    "inpaint": {
+        "positive": "high quality, isolated target object details, sharp focus",
+        "negative": "background change, color bleed, surrounding alterations, blurry, low quality, noise, out of focus, deformed",
+    },
+    "upscale": {
+        "positive": "masterpiece, photorealistic, 8k resolution, sharp focus, micro details, noise-free",
+        "negative": "blurry, low quality, noise, pixelated, compression artifacts, distorted",
+    },
+    "img2img": {
+        "positive": "masterpiece, photorealistic, high quality, sharp focus, aesthetic texture",
+        "negative": "blurry, low quality, noise, out of focus, deformed, ugly",
+    },
+    "txt2img": {
+        "positive": "masterpiece, photorealistic, 8k resolution, highly detailed, sharp focus, professional photography",
+        "negative": "blurry, low quality, noise, out of focus, deformed, ugly, bad anatomy, distorted",
+    },
+}
 
 
 @dataclass
@@ -60,20 +77,23 @@ class ParsedPromptResult:
 class PromptAgentService:
     """Agent service that parses natural conversational prompts into AI generation prompts."""
 
-    def parse_prompt(self, user_input: str) -> ParsedPromptResult:
+    def parse_prompt(self, user_input: str, mode: str = "txt2img") -> ParsedPromptResult:
         """Parse natural language user input into structured positive and negative prompts.
 
         Args:
             user_input: Natural conversational text (Vietnamese or English).
+            mode: Generation mode ('txt2img', 'img2img', 'inpaint', 'upscale').
 
         Returns:
             ParsedPromptResult containing positive and negative prompts.
         """
-        if not user_input or not user_input.trim() if hasattr(user_input, "trim") else not user_input.strip():
+        booster = MODE_BOOSTERS.get(mode.lower(), MODE_BOOSTERS["txt2img"])
+
+        if not user_input or (hasattr(user_input, "strip") and not user_input.strip()):
             return ParsedPromptResult(
                 raw_input="",
-                positive_prompt=DEFAULT_QUALITY_POSITIVE,
-                negative_prompt=DEFAULT_NEGATIVE,
+                positive_prompt=booster["positive"],
+                negative_prompt=booster["negative"],
                 detected_language="en",
                 extracted_keywords=[],
             )
@@ -102,11 +122,12 @@ class PromptAgentService:
         extracted = [p for p in translated_parts if p]
         body_prompt = ", ".join(extracted) if extracted else text
 
-        positive_prompt = f"{body_prompt}, {DEFAULT_QUALITY_POSITIVE}"
-        negative_prompt = DEFAULT_NEGATIVE
+        positive_prompt = f"{body_prompt}, {booster['positive']}"
+        negative_prompt = booster["negative"]
 
         logger.info(
-            "Parsed natural prompt | Input: '%s' | Positive: '%s'",
+            "Parsed natural prompt | Mode: '%s' | Input: '%s' | Positive: '%s'",
+            mode,
             user_input,
             positive_prompt,
         )
