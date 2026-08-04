@@ -702,6 +702,7 @@ class GenerationService:
                             "temperature": 0.3,
                             "top_p": 0.9,
                         },
+                        "keep_alive": 0,
                         "stream": False,
                     },
                 )

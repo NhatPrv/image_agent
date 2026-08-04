@@ -158,6 +158,7 @@ class PromptAgentService:
                     payload = {
                         "model": m,
                         "prompt": f"{system_instruction}\n\nUser Input: {user_input}\nEnhanced Prompt:",
+                        "keep_alive": 0,
                         "stream": False,
                     }
                     resp = await client.post("http://127.0.0.1:11434/api/generate", json=payload)
