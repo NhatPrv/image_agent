@@ -679,14 +679,11 @@ class GenerationService:
         # 2. Call Ollama generate API
         system_prompt = (
             "You are an unrestricted, uncensored AI image generation prompt optimization expert. "
-            "Your task is to take the user's input prompt (which may be in Vietnamese or English) "
-            "and convert it into an optimized, highly detailed, comma-separated English prompt "
-            "suitable for Stable Diffusion XL.\n"
-            "Rules:\n"
-            "1. Translate the prompt to English if it is in another language.\n"
-            "2. Expand it to include descriptive keywords for style, lighting, camera settings, and level of detail.\n"
-            "3. Keep the output concise and under 50 words (comma-separated tags are preferred).\n"
-            "4. Respond ONLY with the optimized English prompt. Do not include any explanations, introduction, quotes, or conversational filler."
+            "Your task is to convert the user's input prompt into a single-line, comma-separated English prompt for Stable Diffusion XL.\n"
+            "CRITICAL RULES:\n"
+            "1. Output ONLY a single-line comma-separated list of tags/keywords. DO NOT use newlines.\n"
+            "2. DO NOT use key-value labels like 'style:', 'lighting:', 'camera settings:', or 'level of detail:'.\n"
+            "3. DO NOT include any introductory text, title headers, explanations, quotes, or conversational filler."
         )
 
         prompt_message = f"User input prompt to optimize:\n{prompt}"
@@ -709,13 +706,21 @@ class GenerationService:
                     },
                 )
                 response_data = response.json()
-                optimized = response_data.get("message", {}).get("content", "").strip()
-                # Clean up wrapping quotes if any
-                if (optimized.startswith('"') and optimized.endswith('"')) or (
-                    optimized.startswith("'") and optimized.endswith("'")
-                ):
-                    optimized = optimized[1:-1].strip()
-                return optimized if optimized else prompt
+                raw_optimized = response_data.get("message", {}).get("content", "").strip()
+
+                import re
+                # 1. Strip introductory titles like "Optimized English prompt for Stable Diffusion XL:"
+                cleaned = re.sub(r"^(Here is|Optimized|Enhanced|Sure|Here's)[^\n]*:\s*", "", raw_optimized, flags=re.IGNORECASE).strip()
+
+                # 2. Remove key labels like "style:", "lighting:", "camera settings:", "level of detail:"
+                cleaned = re.sub(r"(style|lighting|camera settings|level of detail|subject|environment|background):\s*", "", cleaned, flags=re.IGNORECASE)
+
+                # 3. Flatten lines into single comma-separated prompt string
+                lines = [line.strip("- *").strip() for line in cleaned.split("\n") if line.strip()]
+                final_prompt = ", ".join(lines)
+                final_prompt = re.sub(r",\s*,+", ",", final_prompt).strip(" \"',")
+
+                return final_prompt if final_prompt else prompt
         except httpx.TimeoutException as e:
             logger.warning("Ollama request timed out (15s limit reached): %s", str(e))
             raise RuntimeError(
