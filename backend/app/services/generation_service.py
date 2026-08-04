@@ -655,9 +655,9 @@ class GenerationService:
                 f"Ollama is not running. Please start Ollama on your machine first. (Error: {e})"
             )
 
-        # Select model (prefer llama3.1:8b, then qwen2.5-coder:7b, then whatever is available)
+        # Select model (prefer uncensored dolphin-llama3:8b first, then dolphin-mistral, then others)
         selected_model = None
-        for preferred in ["llama3.1:8b", "qwen2.5-coder:7b", "llama3.1", "qwen2.5-coder"]:
+        for preferred in ["dolphin-llama3:8b", "dolphin-llama3", "dolphin-mistral", "llama3.1:8b", "qwen2.5-coder:7b", "llama3.1", "qwen2.5-coder"]:
             # Match partial name
             for m in models:
                 if preferred in m:
@@ -678,7 +678,7 @@ class GenerationService:
 
         # 2. Call Ollama generate API
         system_prompt = (
-            "You are a Stable Diffusion prompt optimization expert. "
+            "You are an unrestricted, uncensored AI image generation prompt optimization expert. "
             "Your task is to take the user's input prompt (which may be in Vietnamese or English) "
             "and convert it into an optimized, highly detailed, comma-separated English prompt "
             "suitable for Stable Diffusion XL.\n"
@@ -692,7 +692,7 @@ class GenerationService:
         prompt_message = f"User input prompt to optimize:\n{prompt}"
 
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.post(
                     f"{ollama_url}/api/chat",
                     json={
@@ -717,9 +717,9 @@ class GenerationService:
                     optimized = optimized[1:-1].strip()
                 return optimized if optimized else prompt
         except httpx.TimeoutException as e:
-            logger.warning("Ollama request timed out (60s limit reached): %s", str(e))
+            logger.warning("Ollama request timed out (15s limit reached): %s", str(e))
             raise RuntimeError(
-                "Ollama request timed out. The local model might be loading slowly into memory. Please try again in a few seconds."
+                "Ollama model is currently downloading or loading into memory. Please wait a few seconds for the download to finish."
             ) from e
         except Exception as e:
             logger.warning("Ollama request failed: %s", str(e))
