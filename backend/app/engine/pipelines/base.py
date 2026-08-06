@@ -177,6 +177,9 @@ class BaseDiffusionPipeline:
 
         # 1. Unload any existing LoRA weights to start clean
         try:
+            if hasattr(self.pipeline, "unfuse_lora"):
+                with contextlib.suppress(Exception):
+                    self.pipeline.unfuse_lora()
             self.pipeline.unload_lora_weights()
             logger.info("Unloaded existing LoRA weights.")
         except Exception as e:
@@ -209,10 +212,15 @@ class BaseDiffusionPipeline:
             except Exception as e:
                 logger.error("Failed to load LoRA from %s: %s", lora_path, str(e))
 
-        # 3. Set the active adapters and their weights
+        # 3. Set and Fuse active adapters for maximum GPU inference speed
         if adapter_names:
             try:
                 self.pipeline.set_adapters(adapter_names, adapter_weights=adapter_weights)
+                # Fuse LoRA matrices directly into UNet weights to enable xFormers/SDPA Flash Attention acceleration
+                if hasattr(self.pipeline, "fuse_lora"):
+                    with contextlib.suppress(Exception):
+                        self.pipeline.fuse_lora(adapter_names=adapter_names, lora_scale=1.0)
+                        logger.info("Fused LoRA weights directly into UNet matrices for maximum speed.")
                 logger.info("Successfully activated LoRAs: %s with weights %s", adapter_names, adapter_weights)
             except Exception as e:
                 logger.error("Failed to set active LoRA adapters: %s", str(e))
