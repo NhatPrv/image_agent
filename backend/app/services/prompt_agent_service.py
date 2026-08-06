@@ -15,32 +15,77 @@ logger = logging.getLogger(__name__)
 
 # Common Vietnamese-to-English translation mapping for image editing & generation
 VIETNAMESE_DICTIONARY: dict[str, str] = {
+    # Styles & Aesthetics
+    "phong cách hoạt hình 3d": "3D animation style, Pixar style, highly detailed 3D render",
+    "phong cách hoạt hình": "cartoon style, 3D animated style",
+    "hoạt hình 3d": "3D animation style",
+    "hoạt hình": "cartoon style",
+    "phong cách anime": "anime style, japanese animation",
+    "tranh dầu": "oil painting style",
+    "tranh vẽ tay": "hand-drawn illustration",
+    "chụp vĩ mô": "macro photography",
+    "sắc nét": "sharp focus highly detailed",
+    "trong suốt": "crystal clear transparent",
+
+    # Animals
+    "con chó": "dog",
+    "chó": "dog",
+    "con ếch": "frog",
+    "ếch": "frog",
+    "con heo": "pig",
+    "con lợn": "pig",
+    "heo": "pig",
+    "lợn": "pig",
+    "con mèo": "cat, kitten",
+    "mèo": "cat, kitten",
+    "con gấu": "bear",
+    "gấu": "bear",
+    "con thỏ": "rabbit, bunny",
+    "thỏ": "rabbit, bunny",
+    "con rồng": "dragon",
+    "rồng": "dragon",
+    "con sư tử": "lion",
+    "sư tử": "lion",
+    "con hổ": "tiger",
+    "hổ": "tiger",
+    "con chim": "bird",
+    "chim": "bird",
+    "con cá": "fish",
+    "cá": "fish",
+
+    # Actions & Positions
+    "đứng cạnh nhau": "standing together side by side",
+    "đứng cùng nhau": "standing together",
+    "đứng cạnh": "standing next to",
+    "bên cạnh nhau": "side by side",
+    "cạnh nhau": "side by side",
+    "ngồi cạnh": "sitting next to",
+    "chạy trên": "running on",
+    "nằm trên": "lying on",
+
+    # Objects & Elements
     "hiệu ứng đóng băng": "frosted ice crystallization effect, frozen ice texture",
     "đóng băng": "frosted ice texture, frozen ice effect",
     "băng giá": "frosty ice texture",
     "quả bóng nước": "crystal water sphere droplet",
     "quả bóng": "crystal sphere",
     "giọt nước": "crystal water droplet",
-    "quả cầu": "glass sphere",
     "quả cầu pha lê": "transparent crystal glass sphere",
+    "quả cầu": "glass sphere",
     "lá cây": "green leaf",
-    "mắt": "eyes",
     "đôi mắt": "eyes",
+    "mắt": "eyes",
     "mắt đỏ": "glowing red eyes",
     "mắt xanh": "vibrant blue eyes",
-    "mèo": "kitten",
     "màu đỏ": "red",
     "màu xanh": "blue",
     "màu vàng": "golden yellow",
     "màu trắng": "pure white",
+    "rêu": "green moss background",
     "sửa": "modify",
     "đổi": "change to",
     "thành": "into",
     "biến thành": "transformed into",
-    "trong suốt": "crystal clear transparent",
-    "rêu": "green moss background",
-    "chụp vĩ mô": "macro photography",
-    "sắc nét": "sharp focus highly detailed",
 }
 
 # Mode-specific prompt booster configurations
@@ -98,7 +143,8 @@ class PromptAgentService:
                 extracted_keywords=[],
             )
 
-        text = user_input.strip()
+        # Un-slugify hyphens and underscores first
+        text = re.sub(r"[\-_]+", " ", user_input.strip())
         is_vietnamese = bool(re.search(r"[àáảãạâầấẩẫậăằắẳẵặèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]", text, re.IGNORECASE))
         detected_lang = "vi" if is_vietnamese else "en"
 
@@ -106,13 +152,15 @@ class PromptAgentService:
 
         if is_vietnamese:
             lower_text = text.lower()
-            # Replace dictionary phrases
-            for vi_phrase, en_phrase in VIETNAMESE_DICTIONARY.items():
+            # Replace dictionary phrases (longest phrases first)
+            sorted_phrases = sorted(VIETNAMESE_DICTIONARY.keys(), key=len, reverse=True)
+            for vi_phrase in sorted_phrases:
+                en_phrase = VIETNAMESE_DICTIONARY[vi_phrase]
                 if vi_phrase in lower_text:
                     translated_parts.append(en_phrase)
                     lower_text = lower_text.replace(vi_phrase, "")
 
-            # Cleanup remaining words
+            # Cleanup remaining words (remove punctuation, strip extra whitespace)
             cleaned_remaining = re.sub(r"[^\w\s]", "", lower_text).strip()
             if cleaned_remaining:
                 translated_parts.append(cleaned_remaining)
