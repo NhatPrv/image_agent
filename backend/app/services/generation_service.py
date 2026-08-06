@@ -710,11 +710,11 @@ class GenerationService:
                 raw_optimized = response_data.get("message", {}).get("content", "").strip()
 
                 import re
-                # 1. Strip introductory titles like "Optimized English prompt for Stable Diffusion XL:"
-                cleaned = re.sub(r"^(Here is|Optimized|Enhanced|Sure|Here's)[^\n]*:\s*", "", raw_optimized, flags=re.IGNORECASE).strip()
+                # 1. Strip introductory titles & prefixes like "tags/keywords:", "tags:", "keywords:", "Optimized prompt:"
+                cleaned = re.sub(r"^(tags\s*/?\s*keywords|keywords|tags|prompt|enhanced prompt|positive prompt|here is|optimized|enhanced|sure|here's)[^\n:]*:\s*", "", raw_optimized, flags=re.IGNORECASE).strip()
 
-                # 2. Remove key labels like "style:", "lighting:", "camera settings:", "level of detail:"
-                cleaned = re.sub(r"(style|lighting|camera settings|level of detail|subject|environment|background):\s*", "", cleaned, flags=re.IGNORECASE)
+                # 2. Remove key labels like "style:", "lighting:", "camera settings:", "level of detail:", "tags/keywords:"
+                cleaned = re.sub(r"(tags\s*/?\s*keywords|keywords|tags|style|lighting|camera settings|level of detail|subject|environment|background):\s*", "", cleaned, flags=re.IGNORECASE)
 
                 # 3. Flatten lines into single comma-separated prompt string
                 lines = [line.strip("- *").strip() for line in cleaned.split("\n") if line.strip()]

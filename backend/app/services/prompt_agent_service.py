@@ -166,8 +166,15 @@ class PromptAgentService:
                         data = resp.json()
                         result_text = data.get("response", "").strip()
                         if result_text:
+                            import re
+                            # Strip headers, "tags/keywords:", "tags:", "keywords:", "style:", etc.
+                            cleaned = re.sub(r"^(tags\s*/?\s*keywords|keywords|tags|prompt|enhanced prompt|positive prompt|here is|optimized|enhanced|sure|here's)[^\n:]*:\s*", "", result_text, flags=re.IGNORECASE).strip()
+                            cleaned = re.sub(r"(tags\s*/?\s*keywords|keywords|tags|style|lighting|camera settings|level of detail|subject|environment|background):\s*", "", cleaned, flags=re.IGNORECASE)
+                            lines = [line.strip("- *").strip() for line in cleaned.split("\n") if line.strip()]
+                            final_text = ", ".join(lines)
+                            final_text = re.sub(r",\s*,+", ",", final_text).strip(" \"',")
                             logger.info("Successfully enhanced prompt via Ollama model '%s'", m)
-                            return result_text
+                            return final_text if final_text else user_input
                 except Exception as err:
                     logger.debug("Ollama model '%s' failed or not installed: %s", m, str(err))
 
