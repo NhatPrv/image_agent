@@ -79,14 +79,17 @@ class InpaintPipeline(BaseDiffusionPipeline):
 
             pipe = await loop.run_in_executor(None, _load_pipe)
             self.pipeline = pipe
-            if not (
-                self.settings.gpu.cpu_offload
-                or self.settings.gpu.sequential_cpu_offload
-                or is_sdxl
-            ):
+            if not (self.settings.gpu.cpu_offload or self.settings.gpu.sequential_cpu_offload):
                 self.pipeline = pipe.to(device)
 
             self.apply_optimizations()
+
+            # Clean CPU memory state dicts from RAM
+            import gc
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
             logger.info("Inpainting pipeline loaded successfully.")
         except Exception as e:
             logger.error("Failed to load model file %s for Inpainting: %s", model_path, str(e))

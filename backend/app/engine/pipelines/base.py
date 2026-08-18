@@ -88,18 +88,23 @@ class BaseDiffusionPipeline:
             except Exception as e:
                 logger.warning("Could not enable VAE tiling: %s", str(e))
 
-        # ─── 5. Model CPU Offloading (Saves VRAM by keeping inactive modules on RAM) ───
-        if self.settings.gpu.cpu_offload or is_sdxl_or_flux:
+        # ─── 5. Attention Slicing (Saves VRAM while keeping full model on GPU) ───
+        if is_sdxl_or_flux:
+            try:
+                self.pipeline.enable_attention_slicing("max")
+                logger.info("Optimized: SDXL attention slicing enabled.")
+            except Exception as e:
+                logger.warning("Could not enable attention slicing: %s", str(e))
+
+        # ─── 6. Model CPU Offloading (Only when explicitly enabled in settings for low-end GPUs) ───
+        if self.settings.gpu.cpu_offload:
             try:
                 self.pipeline.enable_model_cpu_offload()
                 logger.info("Optimized: Model CPU offload enabled.")
             except Exception as e:
                 logger.warning("Could not enable model CPU offload: %s", str(e))
 
-        # ─── 6. Sequential CPU Offloading (Aggressive VRAM optimization) ───
-        # Note: Do not enable sequential CPU offload for SDXL/FLUX models,
-        # as it is incompatible with low_cpu_mem_usage=True and raises
-        # 'ValueError: META device type not an accelerator.'
+        # ─── 7. Sequential CPU Offloading (Aggressive VRAM optimization for extreme low-end) ───
         if self.settings.gpu.sequential_cpu_offload and not is_sdxl_or_flux:
             try:
                 self.pipeline.enable_sequential_cpu_offload()
